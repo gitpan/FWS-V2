@@ -21,4 +21,4 @@ requires:
   DBI: 0
   Digest::SHA1: 0
   Test::More: 0
-version: 0.001
+version: 0.002
