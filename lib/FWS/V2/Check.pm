@@ -3,6 +3,7 @@ package FWS::V2::Check;
 use 5.006;
 use strict;
 
+
 =head1 NAME
 
 FWS::V2::Check - Framework Sites version 2 validation and checking methods
@@ -38,17 +39,6 @@ Simple methods that will return boolean results based on the validation of the p
 
 =cut
 
-
-#
-# constructor
-#
-sub new {
-        my $proto = shift;
-        my $class = ref($proto) || $proto;
-        my $self = {@_};
-        bless ($self, $class);
-        return $self;
-}
 
 =head1 METHODS
 

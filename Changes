@@ -1,7 +1,10 @@
 Revision history for FWS-V2
 
-0.001 2012-02-26
- - Update test plan with new modules added
+0.003 2012-02-28
+ - Added updateDatabase
+
+0.002 2012-02-26
+ - Updated test plan with new modules added
 
 0.001 2012-02-26
  - Initial Release

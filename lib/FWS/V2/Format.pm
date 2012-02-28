@@ -46,17 +46,6 @@ In version 2 all GUID's have a prefix, if not specified it will be set to 'd'.  
 
 =cut
 
-#
-# internal wrapper for FWS admin prefix compatability not for external consumption!
-#
-sub createFWS2GUID {
-        my ($self,$class) = @_;
-        # set the class if its not passed to d (generic data)
-        if ($self->siteId() eq 'fws') {$class = 'f'};
-        return $self->createGUID($class);
-        }
-
-
 sub createGUID {
         my ($self,$guid) =@_;
 
