@@ -13,9 +13,13 @@ WriteMakefile(
       : ()),
     PL_FILES            => {},
     PREREQ_PM => {
-        'Test::More' 	=> 0,
-        'DBI' 		=> 0,
-	'Digest::SHA1'  => 0
+        'Test::More' 		=> 0,
+        'DBI' 			=> 0,
+        'CGI' 			=> 0,
+        'Time::Local'		=> 0,
+        'Storable'		=> 0,
+        'Crypt::Blowfish'	=> 0,
+	'Digest::SHA1'  	=> 0
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => 'FWS-V2-*' },

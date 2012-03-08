@@ -9,11 +9,11 @@ FWS::V2::Database - Framework Sites version 2 common database methods
 
 =head1 VERSION
 
-Version 0.001
+Version 0.002
 
 =cut
 
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 
 
 =head1 SYNOPSIS
@@ -42,172 +42,43 @@ Framework Sites version 2 common methods that connect, read, write, reorder or a
 
 =head1 METHODS
 
-=head2 connectDBH
+=head2 addExtraHash
 
-Do the initial database connection via MySQL or SQLite.  This method will return back the DBH it creates, but it is only here for completeness and would normally never be used.  For FWS database routines this is not required as it will be implied when executing those methods..
+In FWS database tables there is a field named extra_value.  This field holds a hash that is to be appended to the return hash of the record it belongs to.
+        
+	#
+        # If we have an extra_value field and a real hash lets combine them together
+        #
+        %dataHash = $fws->addExtraHash($extra_value,%dataHash);
 
-        $fws->connectDBH();
+Note: If anything but stored extra_value strings are passed, the method will throw an error
 
 =cut
 
-sub connectDBH {
-        my ($self) = @_;
+
+sub addExtraHash {
+        my ($self,$extraValue,%addHash) = @_;
 
         #
-        # grab the DBI if we don't have it yet
+        # lets use storable in comptabile nfreeze mode
         #
-        if (!defined $self->{'_DBH'}) {
-
-                #
-                # hook up with some DBI
-                #
-                use DBI;
-
-                #
-                # default set to mysql
-                #
-                my $connectString = $self->{'DBType'}.":".$self->{'DBName'}.":".$self->{'DBHost'}.":3306";
-
-                #
-                # SQLite
-                #
-                if ($self->{'DBType'} =~ /SQLite/i) { $connectString = "SQLite:".$self->{'DBName'} }
-
-                #
-                # set the DBH for use throughout the script
-                #
-                $self->{'_DBH'} = DBI->connect("DBI:".$connectString,$self->{'DBUser'}, $self->{'DBPassword'});
-
-                #
-                # in case the user is going to do thier own thing, we will pass back the DBH
-                #
-                return $self->{'_DBH'};
-        }
-}
-
-
-
-=head2 runSQL
-
-Return an reference to an array that contains the results of the SQL ran.
-
-
+        use Storable qw(nfreeze thaw);
 
         #
-        # retrieve a reference to an array of data we asked for
+        # pull the hash out
         #
-        my $dataArray = $fws->runSQL(SQL=>"select id,type from id_and_type_table");     # Any SQL statement or query
-
-        #
-        # loop though the array
-        #
-        while (@$dataArray) {
-
-                #
-                # collect the data each row at a time
-                #
-                my $id          = shift(@$dataArray);
-                my $type        = shift(@$dataArray);
-
-                #
-                # display or do something with the data
-                #
-                print "ID: ".$id." - ".$type."\n";
-        }
-
-
-=cut
-
-sub runSQL {
-        my ($self,%paramHash) = @_;
-
-        $self->connectDBH();
+        my %extraHash;
 
         #
-        # Get this data array ready to slurp
-        # and set the failFlag for future use to autocreate a dB schema
-        # based on a default setting
+        # only if its populated unthaw it
         #
-        my @data;
-        my $errorResponse;
+        if ($extraValue ne '') { %extraHash = %{thaw($extraValue)} }
 
         #
-        # use the dbh we were handed... if not use the default one.
+        # return the two hashes combined together
         #
-        if (!exists $paramHash{'DBH'}) {$paramHash{'DBH'} = $self->{'_DBH'}}
-
-        #
-        # once loging is turned on we can enable this
-        #
-        #$self->SQLLog($paramHash{'SQL'});
-
-        #
-        # prepare the SQL and loop though the arrays
-        #
-
-        my $sth = $paramHash{'DBH'}->prepare($paramHash{'SQL'});
-        if ($sth ne '') {
-                $sth->{PrintError} = 0;
-                $sth->execute();
-
-                #
-                # clean way to get error response
-                #
-                if (defined $DBI::errstr) { $errorResponse .= $DBI::errstr }
-
-                #
-                # set the row variable ready to be populated
-                #
-                my @row;
-                my @cleanRow;
-                my $clean;
-
-                #
-                # SQL lite gathing and normilization
-                #
-                if ($self->{'DBType'} =~ /^SQLite$/i) {
-                        while (@row = $sth->fetchrow) {
-                                while (@row) {
-                                        $clean = shift(@row);
-                                        $clean = '' if !defined $clean;
-                                        $clean =~ s/\\\\/\\/sg;
-                                        push (@cleanRow,$clean);
-                                }
-                                push (@data,@cleanRow);
-                        }
-                }
-
-                #
-                # Fault to MySQL if we didn't find another type
-                #
-                else {
-                        while (@row = $sth->fetchrow) {
-                                while (@row) {
-                                        $clean = shift(@row);
-                                        $clean = '' if !defined $clean;
-                                        push (@cleanRow,$clean);
-                                }
-                                push (@data,@cleanRow);
-                        }
-                }
-        }
-
-        #
-        # check if myDBH has been blanked - if so we have an error
-        # or I didn't have one to begin with
-        #
-        if ($errorResponse) {
-                #
-                # once FWSLog is enabled I can enable this
-                #
-                warn 'SQL ERROR: '.$paramHash{'SQL'}. ' - '.$errorResponse;
-                #$self->FWSLog('SQL ERROR: '.$paramHash{'SQL'});
-        }
-
-        #
-        # return this back as a normal array
-        #
-        return \@data;
+        my %mergedHash = (%addHash,%extraHash);
+        return %mergedHash;
 }
 
 
@@ -309,14 +180,14 @@ sub alterTable {
         #
         # compile the statement
         #
-        my $createStatement = "create table ".$paramHash{'table'}." (site_guid char(16) NOT NULL default ''".$idField.")";
+        my $createStatement = "create table ".$paramHash{'table'}." (site_guid char(36) NOT NULL default ''".$idField.")";
 
 
         #
         # get the table hash
         #
         my %tableHash;
-        my @tableList = $self->openRS($showTablesStatement);
+        my @tableList = @{$self->runSQL(SQL=>$showTablesStatement)};
         while (@tableList) {
                 my $fieldInc                       = shift(@tableList);
                 $tableHash{$fieldInc} = '1';
@@ -333,12 +204,12 @@ sub alterTable {
         #
         # get the table deffinition hash
         #
-        my $tableFieldHash = $self->tableFieldHash($paramHash{'table'});
+        my %tableFieldHash = $self->tableFieldHash($paramHash{'table'});
 
         #
         # make the field if its not there
         #
-        if ($tableFieldHash->{$paramHash{'field'}}{"type"} eq "") {
+        if ($tableFieldHash{$paramHash{'field'}}{"type"} eq "") {
                 $self->runSQL(SQL=>$addStatement);
                 $sqlReturn .= $addStatement."; ";
         }
@@ -349,7 +220,7 @@ sub alterTable {
         # change the datatype if we are talking about MySQL for now if your SQLite
         # we still have to add support for that
         #
-        if ($paramHash{'type'} ne $tableFieldHash->{$paramHash{'field'}}{"type"} && $self->DBType() =~ /^mysql$/i) {
+        if ($paramHash{'type'} ne $tableFieldHash{$paramHash{'field'}}{"type"} && $self->DBType() =~ /^mysql$/i) {
                 $self->runSQL(SQL=>$changeStatement);
                 $sqlReturn .= $changeStatement."; ";
         }
@@ -357,7 +228,8 @@ sub alterTable {
         #
         # set any keys if not the same;
         #
-        if ($tableFieldHash->{$paramHash{'table'}."_".$paramHash{'field'}}{"key"} ne "MUL" && $paramHash{'key'} ne "") {
+	$self->FWSLog($paramHash{'table'}."_".$paramHash{'field'}." ". $tableFieldHash{$paramHash{'table'}."_".$paramHash{'field'}}{"key"}  );
+        if ($tableFieldHash{$paramHash{'table'}."_".$paramHash{'field'}}{"key"} ne "MUL" && $paramHash{'key'} ne "") {
                 $self->runSQL(SQL=>$indexStatement);
                 $sqlReturn .=  $indexStatement."; ";
         }
@@ -365,31 +237,1019 @@ sub alterTable {
         return $sqlReturn;
 }
 
+
+=head2 connectDBH
+
+Do the initial database connection via MySQL or SQLite.  This method will return back the DBH it creates, but it is only here for completeness and would normally never be used.  For FWS database routines this is not required as it will be implied when executing those methods.
+        
+	$fws->connectDBH();
+
+=cut
+
+sub connectDBH {
+        my ($self) = @_;
+
+        #
+        # grab the DBI if we don't have it yet
+        #
+        if (!defined $self->{'_DBH'}) {
+
+                #
+                # hook up with some DBI
+                #
+                use DBI;
+
+		#
+		# DBType for mysql is always lower case
+		#
+                if ($self->{'DBType'} =~ /mysql/i) { $self->{'DBType'} = lc($self->{'DBType'}) }
+
+                #
+                # default set to mysql
+                #
+                my $connectString = $self->{'DBType'}.":".$self->{'DBName'}.":".$self->{'DBHost'}.":3306";
+
+                #
+                # SQLite
+                #
+                if ($self->{'DBType'} =~ /SQLite/i) { $connectString = "SQLite:".$self->{'DBName'} }
+
+                #
+                # set the DBH for use throughout the script
+                #
+                $self->{'_DBH'} = DBI->connect("DBI:".$connectString,$self->{'DBUser'}, $self->{'DBPassword'});
+
+                #
+                # in case the user is going to do thier own thing, we will pass back the DBH
+                #
+                return $self->{'_DBH'};
+        }
+}
+
+
+=head2 dataArray
+
+Retrieve a hash array based on any combination of keywords, type, guid, or tags
+
+	my @dataArray = $fws->dataArray(guid=>$someParentGUID);
+	for my $i (0 .. $#dataArray) {
+     		$valueHash{'html'} .= $dataArray[$i]{'name'}."<br/>";
+	}
+
+Any combination of the following parameters will restrict the results.  At least one is required.
+
+=over 4
+
+=item * guid: Retrieve any element whose parent element is the guid
+
+=item * keywords: A space delimited list of keywords to search for
+
+=item * tags: A comma delimited list of element tags to search for
+
+=item * type: Match any element which this exact type
+
+=item * containerId: Pull the data from the data container
+
+=item * childGUID: Retrieve any element whose child element is the guid (This option can not be used with keywords attribute)
+
+=back
+
+Note: guid and containerId cannot be used at the same time, as they both specify the parent your pulling the array from
+
+=cut
+
+sub dataArray {
+        my ($self,%paramHash) = @_;
+
+        #
+        # set site GUID if it wasn't passed to us
+        #
+        if ($paramHash{'siteGUID'} eq '') {$paramHash{'siteGUID'} = $self->{'siteGUID'} }
+
+        #
+        # transform the containerId to the parent id
+        #
+        if ($paramHash{'containerId'} ne '') {
+
+                #
+                # if we don't get one, we will fail on the next check because we won't have a guid
+                #
+                ($paramHash{'guid'}) = @{$self->runSQL(SQL=>"select guid from data where name='".$self->safeSQL($paramHash{'containerId'})."' and element_type='data' and site_guid='".$self->safeSQL($paramHash{'siteGUID'})."' LIMIT 1")};
+
+        }
+
+        #
+        # if we don't have any data to search for get out so we don't get "EVERYTHING"
+        #
+        if ($paramHash{'childGUID'} eq '' && $paramHash{'guid'} eq '' && !$paramHash{'type'} && $paramHash{'keywords'} eq '' && $paramHash{'tags'} eq '') {
+                  return ();
+        }
+
+        #
+        # get the where and join builders ready for content
+        #
+        my $addToExtWhere       = "";
+        my $addToDataWhere      = "";
+        my $addToExtJoin        = "";
+        my $addToDataXRefJoin   = "";
+
+	#
+        # bind by element Type could be a comma delemented List
+        #
+        if ($paramHash{'type'} ne '') {
+                my @typeArray   = split(/,/,$paramHash{'type'});
+                $addToDataWhere .= 'and (';
+                $addToExtWhere  .= 'and (';
+                while (@typeArray) {
+                        my $type = shift(@typeArray);
+                        $addToDataWhere .= "data.element_type like '".$type."' or ";
+                }
+                $addToExtWhere  =~ s/ or $//g;
+                $addToExtWhere  .= ')';
+                $addToDataWhere =~ s/ or $//g;
+                $addToDataWhere .= ')';
+        }
+
+        #
+        # data left join connector
+        #
+        my $dataConnector =  'guid_xref.child=data.guid';
+
+        #
+        # bind critera by child guid, so we are only seeing stuff who's child = #
+        #
+        if($paramHash{'childGUID'} ne '') {
+                $addToExtWhere  .= "and guid_xref.child = '".$self->safeSQL($paramHash{'childGUID'})."' ";
+                $addToDataWhere .= "and guid_xref.child = '".$self->safeSQL($paramHash{'childGUID'})."' ";
+                $dataConnector  = 'guid_xref.parent=data.guid'
+        }
+
+        #
+        # bind critera by array guid, so we are only seeing stuff who's parent = #
+        #
+        if ($paramHash{'guid'} ne '') {
+                $addToExtWhere  .= "and guid_xref.parent = '".$self->safeSQL($paramHash{'guid'})."' ";
+                $addToDataWhere .= "and guid_xref.parent = '".$self->safeSQL($paramHash{'guid'})."' ";
+        }
+
+
+	#
+	# find data by tags
+	#
+        if ($paramHash{'tags'} ne '') {
+                my @tagsArray = split(/,/,$paramHash{'tags'});
+                my $tagGUIDs = '';
+                while (@tagsArray) {
+                        my $checkTag = shift(@tagsArray);
+
+                        #
+                        # bind by tags Type could be a comma delemented List
+                        #
+                        my %elementHash = $self->_fullElementHash();
+
+
+			for my $elementType ( keys %elementHash ) {
+                        my $incTags = $elementHash{$elementType}{"tags"};
+                        if (            ($incTags =~/^$checkTag$/
+                                                || $incTags =~/^$checkTag,/
+                                                || $incTags =~/,$checkTag$/
+                                                || $incTags =~/,$checkTag,$/
+                                                )
+                                                && $incTags ne '' && $checkTag ne '') {
+                                        $tagGUIDs .= ',\''.$elementType.'\'';
+                                        }
+                                }
+                        }
+
+                $addToDataWhere .= 'and (data.element_type in (\'\''.$tagGUIDs.'))';
+                $addToExtWhere  .= 'and (data.element_type in (\'\''.$tagGUIDs.'))';
+                }
+
+
+        #
+        # add the keywordScore field response
+        #
+        my $keywordScoreSQL = '1';
+        my $dataCacheSQL = '1';
+        my $dataCacheJoin = '';
+
+        #
+        # if any keywords are added,  and create an array of ID's and join them into comma delmited use
+        #
+        if ($paramHash{'keywords'} ne '') {
+
+                #
+                # build the field list we will search against
+                #
+                my @fieldList = ("data_cache.title","data_cache.name");
+                for my $key ( keys %{$self->{"dataCacheFields"}} ) { push(@fieldList,"data_cache.".$key) }
+
+                #
+                # set the cache and join statement starters
+                #
+                $dataCacheSQL   = 'data_cache.pageIdOfElement';
+                $dataCacheJoin  = 'left join data_cache on (data_cache.guid=child)';
+
+                #
+                # do some last minute checking for keywords stablity
+                #
+                $paramHash{'keywords'} =~ s/[^a-zA-Z0-9 \.\-]//sg;
+
+                #
+                # build the actual keyword chains
+                #
+                $addToDataWhere .= " and data.active='1' and (";
+                $addToDataWhere .= $self->_getKeywordSQL($paramHash{'keywords'},@fieldList);
+                $addToDataWhere .= ")";
+
+                #
+                # if we are on mysql lets do some fuzzy matching
+                #
+                if ($self->{'DBType'} =~ /^mysql$/i) {
+                        $keywordScoreSQL = "(";
+                        while (@fieldList) {
+                                $keywordScoreSQL .= "(MATCH (".$self->safeSQL(shift(@fieldList)).") AGAINST ('".$self->safeSQL($paramHash{'keywords'})."'))+"
+                                }
+                        $keywordScoreSQL =~ s/\+$//sg;
+                        $keywordScoreSQL =  $keywordScoreSQL.")+1 as keywordScore";
+                        }
+                }
+
+        my @hashArray;
+        my $recordData = $self->runSQL(SQL=>"select distinct ".$keywordScoreSQL.",".$dataCacheSQL.",data.extra_value,data.guid,data.created_date,data.lang,guid_xref.site_guid,data.site_guid,data.active,data.friendly_url,data.title,data.disable_title,data.default_element,data.disable_edit_mode,data.element_type,data.nav_name,data.name,guid_xref.parent,guid_xref.layout from guid_xref ".$dataCacheJoin."  left join data on (guid_xref.site_guid='".$self->safeSQL($paramHash{'siteGUID'})."') and ".$dataConnector." ".$addToDataXRefJoin." ".$addToExtJoin."   left join element on (element.guid = data.element_type or data.element_type = element.type) where guid_xref.parent != '' and guid_xref.site_guid is not null ".$addToDataWhere." order by guid_xref.ord");
+
+
+        #
+        # for speed we will add this to here so we don't have to ask it EVERY single time we loop though the while statemnent
+        #
+        my $showMePlease = 0;
+        if (($self->formValue('editMode') eq '1' || $self->formValue('p') =~ /^fws_/) ) { $showMePlease =1 }
+
+	#
+	# move though the data records creating the individual hashes
+	#
+        while (@{$recordData}) {
+                my %dataHash;
+
+                my $keywordScore                = shift(@{$recordData});
+                my $pageIdOfElement             = shift(@{$recordData});
+
+                my $extraValue                  = shift(@{$recordData});
+
+                $dataHash{'guid'}               = shift(@{$recordData});
+                $dataHash{'createdDate'}        = shift(@{$recordData});
+                $dataHash{'lang'}               = shift(@{$recordData});
+                $dataHash{'guid_xref_site_guid'}= shift(@{$recordData});
+                $dataHash{'site_guid'}          = shift(@{$recordData});
+                $dataHash{'active'}             = shift(@{$recordData});
+                $dataHash{'pageFriendlyURL'}    = shift(@{$recordData});
+                $dataHash{'title'}              = shift(@{$recordData});
+                $dataHash{'disableTitle'}       = shift(@{$recordData});
+                $dataHash{'defaultElement'}     = shift(@{$recordData});
+                $dataHash{'disableEditMode'}    = shift(@{$recordData});
+                $dataHash{'type'}               = shift(@{$recordData});
+                $dataHash{'navigationName'}     = shift(@{$recordData});
+                $dataHash{'name'}               = shift(@{$recordData});
+                $dataHash{'parent'}             = shift(@{$recordData});
+                $dataHash{'layout'}             = shift(@{$recordData});
+
+                if ($dataHash{'active'} || ($showMePlease && $dataHash{'site_guid'} eq $paramHash{'siteGUID'}) || ($paramHash{'siteGUID'} ne $dataHash{'site_guid'} && $dataHash{'active'})) {
+
+                        #
+                        # twist our legacy statements around.  titleOrig isn't legacy - but I don't
+                        # know why its here either.  We will attempt to deprecate it on the next version
+                        #
+                        $dataHash{'element_type'}               = $dataHash{'type'};
+                        $dataHash{'titleOrig'}                  = $dataHash{'title'};
+
+                        #
+                        # if the title is blank lets dump the name into it
+                        #
+                        if ($dataHash{'title'} eq '') { $dataHash{'title'} =  $dataHash{'name'} }
+
+                        #
+                        # add the extended fields and create the hash
+                        #
+                        %dataHash = $self->addExtraHash($extraValue,%dataHash);
+
+                        #
+                        # overwriting these, just in case someone tried to save them in the extended hash
+                        #
+                        $dataHash{'keywordScore'}       = $keywordScore;
+                        $dataHash{'pageIdOfElement'}    = $pageIdOfElement;
+
+                        #
+                        # push the hash into the array
+                        #
+                        push(@hashArray,{%dataHash});
+                }
+        }
+
+	#
+	# return the reference or the array
+	#
+        if ($paramHash{'ref'} eq '1') { return \@hashArray } else {return @hashArray }
+}
+
+=head2 dataHash
+
+Retrieve a hash or hash reference for a data matching the passed guid.  This can only be used after setSiteValues() because it required $fws->{'siteGUID'} to be defined.
+
+	#
+	# get the hash itself
+	#
+        my %dataHash 	= $fws->dataHash(guid=>'someguidsomeguidsomeguid');
+       
+	#
+	# get a reference to the hash
+	# 
+	my $dataHashRef = $fws->dataHash(guid=>'someguidsomeguidsomeguid',ref=>1);
+
+=cut
+
+sub dataHash {
+        my ($self,%paramHash) = @_;
+        
+	#
+        # set site GUID if it wasn't passed to us
+        #
+        if ($paramHash{'siteGUID'} eq '') {$paramHash{'siteGUID'} = $self->{'siteGUID'} }
+
+
+        my $recordData =  $self->runSQL(SQL=>"select data.extra_value,data.element_type,'lang',lang,'guid',data.guid,'pageFriendlyURL',friendly_url,'defaultElement',data.default_element,'guid_xref_site_guid',data.site_guid,'showLogin',data.show_login,'showResubscribe',data.show_resubscribe,'groupId',data.groups_guid,'disableEditMode',data.disable_edit_mode,'site_guid',data.site_guid,'title',data.title,'disableTitle',data.disable_title,'active',data.active,'navigationName',nav_name,'name',data.name from data left join site on site.guid=data.site_guid where data.guid='".$self->safeSQL($paramHash{'guid'})."' and (data.site_guid='".$self->safeSQL($paramHash{'siteGUID'})."' or site.sid='fws')");
+
+        #
+        # pull off the first two fields because we need to manipulate them
+        #
+        my $extraValue  = shift(@$recordData);
+        my $dataType    = shift(@$recordData);
+
+        #
+        # convert it to a hash
+        #
+        my %dataHash                    = @$recordData;
+
+        #
+        # do some legacy data type switching around.  some call it type (wich it should be, and some call it element_type
+        #
+        $dataHash{"type"}               = $dataType;
+        $dataHash{"element_type"}       = $dataType;
+
+        #
+        # combine the hash
+        #
+        %dataHash                       = $self->addExtraHash($extraValue,%dataHash);
+
+        #
+        # Overwrite the title with the name if it is blank
+        #
+        if ($dataHash{'title'} eq '') { $dataHash{'title'} =  $dataHash{'name'} }
+
+        #
+        # return the hash or hash reference
+        #
+        if ($paramHash{'ref'} eq '1') { return \%dataHash } else {return %dataHash }
+}
+
+=head2 fwsGUID
+
+Retrieve the GUID for the fws site. If it does not yet exist, make a new one.
+
+        print $fws->fwsGUID();
+
+=cut
+
+sub fwsGUID {
+        my ($self) = @_;
+
+        #
+        # if is not set, set it and create the site id
+        #
+        if ($self->siteValue('fwsGUID') eq '') {
+
+                #
+                # get the sid for the fws site
+                #
+                my ($fwsGUID) = $self->getSiteGUID('fws');
+
+                #
+                # if its blank make a new one
+                #
+                if ($fwsGUID eq '') {
+                        $fwsGUID = $self->createGUID('f');
+                        my ($adminGUID) = $self->getSiteGUID('admin');
+                        $self->runSQL(SQL=>"insert into site set sid='fws',guid='".$fwsGUID."',site_guid='".$self->safeSQL($adminGUID)."'");
+                }
+
+                #
+                # add it as a siteValue and return the result
+                #
+                $self->siteValue('fwsGUID',$fwsGUID) ;
+                return $fwsGUID;
+        }
+
+        #
+        # I already know it, just return the result
+        #
+        else { return $self->siteValue('fwsGUID') }
+}
+
+
+=head2 getSiteGUID
+
+Get the site GUID for a site by passing the SID of that site.  If the SID does not exist it will return an empty string.
+
+        print $fws->getSiteGUID('somesite');
+
+=cut
+
+sub getSiteGUID {
+        my ($self,$sid) = @_;
+        #
+        # get the ID to the sid for site ids these always match the corrisponding sid
+        #
+        my ($guid) = @{$self->runSQL(SQL=>"select guid from site where sid='".$self->safeSQL($sid)."'")};
+        return $guid;
+}
+
+=head2 getPageGUID
+
+Get the GUID for a site by passing a guid of an item on a page.  If the guid is referenced in more than one place, the page it will be passed could be random.
+
+        my $pageGUID =  $fws->getPageGUID($valueHash{'elementId'},10);
+
+Note: This procedure is very database extensive and should be used lightly.  The default depth to look before giving up is 5, the example above shows searching for 10 depth before giving up. 
+
+=cut
+
+sub getPageGUID {
+        my ($self,$guid,$depth) = @_;
+
+	#
+	# set the depth to how far you will look before giving up
+	#
+	if ($depth eq '') { $depth = 10 }
+
+	#
+	# set the cap counter
+	#
+        my $recurCap = 0;
+
+        #
+        # get the inital type
+        #
+        my $recId = -1;
+        my ($type) = @{$self->runSQL(SQL=>"select element_type from data where guid='".$self->safeSQL($guid)."'")};
+
+        #
+        # recursivly head down till you get "page" or "" as refrence.
+        #
+        while ($type ne 'page' && $type ne 'home' && $guid ne '') {
+                my @idsAndTypes = @{$self->runSQL(SQL=>"select parent,element_type from guid_xref left join data on data.guid=parent where child='".$self->safeSQL($guid)."'")};
+                while (@idsAndTypes) {
+                        $guid           = shift(@idsAndTypes);
+                        my $listType    = shift(@idsAndTypes);
+                        if ($listType eq 'page') {
+                                $recId = $guid;
+                                $type = 'page';
+                        }
+                }
+
+                #
+                # give up after 5 
+                #
+                if ($recurCap > 5) { $type = 'page'; $recId =  -1 }
+                $recurCap++;
+        }
+        return $recId;
+}
+
+
+
+=head2 runSQL
+
+Return an reference to an array that contains the results of the SQL ran.
+
+        #
+        # retrieve a reference to an array of data we asked for
+        #
+        my $dataArray = $fws->runSQL(SQL=>"select id,type from id_and_type_table");     # Any SQL statement or query
+
+        #
+        # loop though the array
+        #
+        while (@$dataArray) {
+
+                #
+                # collect the data each row at a time
+                #
+                my $id          = shift(@$dataArray);
+                my $type        = shift(@$dataArray);
+
+                #
+                # display or do something with the data
+                #
+                print "ID: ".$id." - ".$type."\n";
+        }
+
+
+=cut
+
+sub runSQL {
+        my ($self,%paramHash) = @_;
+
+        $self->connectDBH();
+
+        #
+        # Get this data array ready to slurp
+        # and set the failFlag for future use to autocreate a dB schema
+        # based on a default setting
+        #
+        my @data = ();
+        my $errorResponse;
+
+        #
+        # send this off to the log
+        #
+        $self->SQLLog($paramHash{'SQL'});
+
+        #
+        # prepare the SQL and loop though the arrays
+        #
+
+        my $sth = $self->{'_DBH'}->prepare($paramHash{'SQL'});
+        if ($sth ne '') {
+                $sth->{PrintError} = 0;
+                $sth->execute();
+
+                #
+                # clean way to get error response
+                #
+                if (defined $DBI::errstr) { $errorResponse .= $DBI::errstr }
+
+                #
+                # set the row variable ready to be populated
+                #
+                my $clean;
+
+                #
+                # SQL lite gathing and normilization
+                #
+                if ($self->{'DBType'} =~ /^SQLite$/i) {
+                        while (my @row = $sth->fetchrow) {
+                		my @cleanRow;
+                                while (@row) {
+                                        $clean = shift(@row);
+                                        $clean = '' if !defined $clean;
+                                        $clean =~ s/\\\\/\\/sg;
+                                        push (@cleanRow,$clean);
+                                }
+                                push (@data,@cleanRow);
+                        }
+                }
+
+                #
+                # Fault to MySQL if we didn't find another type
+                #
+                else {
+                        while (my @row = $sth->fetchrow) {
+                		my @cleanRow;
+                                while (@row) {
+                                        $clean = shift(@row);
+                                        $clean = '' if !defined $clean;
+                                        push (@cleanRow,$clean);
+                                }
+                                push (@data,@cleanRow);
+                        }
+                }
+        }
+
+        #
+        # check if myDBH has been blanked - if so we have an error
+        # or I didn't have one to begin with
+        #
+        if ($errorResponse) { 
+		$self->FWSLog('SQL ERROR: '.$paramHash{'SQL'});
+
+		#
+		# run update DB on an error to fix anything that was broke
+		#
+		$self->FWSLog('UPDATED DB: '.$self->updateDatabase());
+		}
+
+        #
+        # return this back as a normal array
+        #
+        return \@data;
+}
+
+
+
+
+=head2 saveData
+
+Update or create a new data record.  If guid is not provided then a new record will be created.   If you pass "newGUID" as a parameter for a new record, the new guid will not be auto generated, newGUID will be used.
+
+        %dataHash = $fws->saveData(%dataHash);
+
+Required hash keys if the data is new:
+
+=over 4
+
+=item * parent: This is the reference to where the data belongs
+
+=item * name: This is the reference id for the record
+
+=item * type: A valid element type
+
+=back
+
+Not required hash keys:
+
+=over 4
+
+=item * $active: 0 or 1. Default is 0 if not specified
+
+=item * newGUID: If this is a new record, use this guid (Note: There is no internal checking to make sure this is unique)
+
+=item * lang: Two letter language definition. (Not needed for most multi-lingual sites, only if the code has a requirement that it is splitting language based on other criteria in the control)
+
+=item * ... Any other extended data fields you want to save with the data element
+
+=back
+
+
+Example of adding a data record
+
+	my %paramHash;
+	$paramHash{'parent'} 		= $fws->formValue('guid');
+	$paramHash{'active'} 		= 1;
+	$paramHash{'name'}   		= $fws->formValue('name');
+	$paramHash{'title'}  		= $fws->formValue('title');
+	$paramHash{'type'}   		= 'site_myElement';
+	$paramHash{'color'}  		= 'red';
+
+	%paramHash = $fws->saveData(%paramHash);
+
+Example of adding the same data record to a "data container"
+
+	my %paramHash;
+	$paramHash{'containerId'} 	= 'thisReference';
+	$paramHash{'active'}		= 1;
+	$paramHash{'name'}   		= $fws->formValue('name');
+	$paramHash{'type'}   		= 'site_thisType';
+	$paramHash{'title'}  		= $fws->formValue('title');
+	$paramHash{'color'}  		= 'red';
+
+	%paramHash = $fws->saveData(%paramHash);
+
+Note: If the containerId does not match or exist, then one will be created in the root of your site, and the data will be added to the new one.
+
+Example of updating a data record:
+
+	$guid = 'someGUIDaaaaabbbbccccc';
+ 
+	#
+	# get the original hash
+	#
+	my %dataHash = $fws->dataHash(guid=>$guid);
+ 
+	#
+	# make some changes
+	#
+	$dataHash{'name'} 	= "New Reference Name";
+	$dataHash{'color'} 	= "blue";
+ 
+	#
+	# Give the altered hash to the update procedure
+	# 
+	$fws->saveData(%dataHash);
+
+=cut
+
+
+sub saveData {
+        my ($self, %paramHash) = @_;
+
+        #
+        # if site_guid is blank, lets set it to the site we are looking at
+        #
+        if ($paramHash{'site_guid'} eq '') { $paramHash{'site_guid'} = $self->{'siteGUID'} }
+
+        #
+        # transform the containerId to the parent id
+        #
+        if ($paramHash{'containerId'} ne '') {
+                #
+                # if we don't have a container for it already, lets make one!
+                #
+                ($paramHash{'parent'}) = @{$self->runSQL(SQL=>"select guid from data where name='".$self->safeSQL($paramHash{'containerId'})."' and element_type='data' LIMIT 1")};
+                if ($paramHash{'parent'} eq '') {
+
+                        #
+                        # recursive!!!! but because containerId isn't passed we are good :)
+                        #
+                        my %parentHash = $self->saveData(name=>$paramHash{'containerId'},type=>'data',parent=>$self->{'homeGUID'},layout=>'0');
+
+                        #
+                        # set the =parent to the new guid
+                        #
+                        $paramHash{'parent'} = $parentHash{'guid'};
+                }
+
+                #
+                # get rid of the containerId, and lets continue with a normal update
+                #
+                delete($paramHash{'containerId'});
+        }
+
+        #
+        # check to see if its already used;
+        #
+        my %usedHash = $self->dataHash(guid=>$paramHash{'guid'});
+
+        #
+        # Lets check the "new guid" if there is one, if it matches, this is an update also
+        #
+        if ($usedHash{'guid'} eq '' && $paramHash{'newGUID'} ne '') {
+                %usedHash = $self->dataHash(guid=>$paramHash{'newGUID'});
+                if ($usedHash{'guid'} ne '') {$paramHash{'guid'} = $paramHash{'newGUID'} }
+        }
+
+        #
+        # if there is no ID this is an add, else, its really just an updateData
+        #
+        if ($usedHash{'guid'} eq '') {
+                #
+                # set the active to false if its not specified
+                #
+                if ($paramHash{'active'} eq '') { $paramHash{'active'} = '0' }
+
+                #
+                # get the intial ID and insert the record
+                #
+                if ($paramHash{'newGUID'} ne '') {$paramHash{'guid'} = $paramHash{'newGUID'} }
+                elsif ($paramHash{'guid'} eq '') {$paramHash{'guid'} = $self->createGUID('d')}
+
+                #
+                # if title is blank make it the name;
+                #
+                if ($paramHash{'title'} eq '') {$paramHash{'title'} = $paramHash{'name'} }
+
+
+                #
+                # insert the record
+                #
+                $self->runSQL(SQL=>"insert into data (guid,site_guid,created_date) values ('".$self->safeSQL($paramHash{'guid'})."','".$self->safeSQL($paramHash{'site_guid'})."','".$self->dateTime(format=>"SQL")."')");
+        }
+
+        #
+        # get the next in the org, so it will be at the end of the list
+        #
+        if ($paramHash{'ord'} eq '') { ($paramHash{'ord'}) = @{$self->runSQL(SQL=>"select max(ord)+1 from guid_xref where site_guid='".$self->safeSQL($paramHash{'site_guid'})."' and parent='".$self->safeSQL($paramHash{'parent'})."'")}}
+
+        #
+        # if we are talking a type of page or home, set layout to 0 because it should not be used
+        #
+        if ($paramHash{'type'} eq 'page' || $paramHash{'type'} eq 'home') { $paramHash{'layout'} = '0' }
+
+        #
+        # if layout is ever blank, set it to main as a default
+        #
+        if ($paramHash{'layout'} eq '') { $paramHash{'layout'} = 'main' }
+
+        #
+        # add the xref record if it needs to
+        #
+        $self->_saveXRef($paramHash{'guid'},$paramHash{'layout'},$paramHash{'ord'},$paramHash{'parent'},$paramHash{'site_guid'});
+
+        #
+        # now before we added something new we might need a new index, lets reset it for good measure
+        #
+        $self->setCacheIndex();
+
+        #
+        # Save the data minus the extra fields
+        #
+        $self->runSQL(SQL=>"update data set extra_value='',show_login='".$self->safeSQL($paramHash{'showLogin'})."',default_element='".$self->safeSQL($paramHash{'default_element'})."',disable_title='".$self->safeSQL($paramHash{'disableTitle'})."',disable_edit_mode='".$self->safeSQL($paramHash{'disableEditMode'})."',disable_title='".$self->safeSQL($paramHash{'disableTitle'})."',lang='".$self->safeSQL($paramHash{'lang'})."',friendly_url='".$self->safeSQL($paramHash{'pageFriendlyURL'})."', active='".$self->safeSQL($paramHash{'active'})."',nav_name='".$self->safeSQL($paramHash{'navigationName'})."',name='".$self->safeSQL($paramHash{'name'})."',title='".$self->safeSQL($paramHash{'title'})."',element_type='".$self->safeSQL($paramHash{'type'})."' where guid='".$self->safeSQL($paramHash{'guid'})."' and site_guid='".$self->safeSQL($paramHash{'site_guid'})."'");
+
+        #
+        # loop though and update every one that is diffrent
+        #
+        for my $key ( keys %paramHash ) {
+                if ($key !~ /^(ord|pageIdOfElement|keywordScore|navigationName|showResubscribe|guid_xref_site_guid|groupId|lang|pageFriendlyURL|type|guid|newGUID|name|element_type|active|title|disableTitle|disableEditMode|defaultElement|showLogin|parent|layout|site_guid)$/) {
+                        $self->saveExtra(table=>'data',siteGUID=>$paramHash{'site_guid'},guid=>$paramHash{'guid'},field=>$key,value=>$paramHash{$key});
+                }
+        }
+
+        #
+        # update the modified stamp
+        #
+        $self->updateModifiedDate(%paramHash);
+
+        #
+        # update the cache data directly
+        #
+        $self->updateDataCache(%paramHash);
+
+        #
+        # return anything created in the paramHash that was changed and already present
+        #
+        return %paramHash;
+}
+
+
+
+=head2 saveExtra
+
+Save data that is part of the extra hash for a FWS table.
+
+        $self->saveExtra(	table		=>'table_name',
+				siteGUID	=>'site_guid_not_required',
+				guid		=>'some_guid',
+				field		=>'table_field','the value we are setting it to');
+
+=cut
+
+sub saveExtra {
+        my ($self,%paramHash) = @_;
+
+        #
+        # make sure we are on a compatable table
+        #
+        if ($paramHash{'table'} eq "data" || $paramHash{'table'} eq "directory" || $paramHash{'table'} eq "collection" || 
+		$paramHash{'table'} eq "profile" || $paramHash{'table'} eq "cart" ||  $paramHash{'table'} eq "topic" ||
+                ($paramHash{'table'} eq "admin_user" && $self->userValue('isAdmin') eq '1') ||
+                $paramHash{'table'} eq "trans" || $paramHash{'table'} eq "trans_item" || $paramHash{'table'} eq "coupon" || $paramHash{'table'} eq "site") {
+
+                #
+                # set up the site_sid restriction... but user type tables don't use
+                #
+                my $addToWhere = " and site_guid='".$self->safeSQL($paramHash{'siteGUID'})."'";
+                if ($paramHash{'table'} eq 'admin_user' || $paramHash{'table'} eq "directory" || $paramHash{'table'} eq 'site' ||
+			$paramHash{'table'} eq 'profile' || $paramHash{'table'} eq 'trans' || $paramHash{'table'} eq 'trans_item' || 
+			$paramHash{'table'} eq 'collection' ) { $addToWhere = '' }
+
+                #
+                # get the hash from the id we are pulling from
+                #
+                my ($extraValue) = @{$self->runSQL(SQL=>"select extra_value from ".$self->safeSQL($paramHash{'table'})." where guid='".$self->safeSQL($paramHash{'guid'})."'".$addToWhere)};
+
+                #
+                # decrypt if we are the trans table
+                #
+                if ($paramHash{'table'} eq 'trans') { $extraValue = $self->FWSDecrypt($extraValue)}
+
+                #
+                # pull the hash out
+                #
+                use Storable qw(nfreeze thaw);
+                my %extraHash;
+                if ($extraValue ne '') { %extraHash = %{thaw($extraValue)} }
+
+                #
+                # add the new one
+                #
+                $extraHash{$paramHash{'field'}} = $paramHash{'value'};
+
+                #
+                # convert back to a hash string
+                #
+                my $hash = nfreeze(\%extraHash);
+
+                #
+                # encrypt if we are the trans table
+                #
+                if ($paramHash{'table'} eq 'trans') { $hash = $self->FWSEncrypt($hash)}
+
+                #
+                # update the hash in the db
+                #
+                $self->runSQL(SQL=>"update ".$self->safeSQL($paramHash{'table'})." set extra_value='".$self->safeSQL($hash)."' where guid='".$self->safeSQL($paramHash{'guid'})."'".$addToWhere);
+
+                #
+                # update the cache table if we are on the data table
+                #
+                if ($paramHash{'table'} eq 'data') {
+
+                        #
+                        # pull the data has, update it, then send it to the cache
+                        #
+                        $self->updateDataCache($self->dataHash(guid=>$paramHash{'guid'}));
+                }
+        }
+}
+
+
+
+=head2 schemaHash
+
+Return the schema hash for an element.  You can pass either the guid or the element type.
+
+        my %dataSchema = $fws->schemaHash('someGUIDorType');
+
+=cut
+
+sub schemaHash {
+        my ($self,$guid) = @_;
+
+        #
+        # maek sure dataSchema is defined before we run the code
+        #
+        my %dataSchema;
+
+        #
+        # get the schemaHash
+        #
+        my ($schemaCode) = @{$self->runSQL(SQL=>"select schema_devel from element where guid='".$self->safeSQL($guid)."' or type='".$self->safeSQL($guid)."'")};
+
+        #
+        # copy the self object to fws
+        #
+        my $fws = $self;
+
+        #
+        # run the eval and populate the hash (Including the title)
+        #
+        eval $schemaCode;
+        my $errorCode = $@;
+        if ($errorCode) { $self->FWSLog('SCHEMA ERROR: '.$guid.' - '.$errorCode) }
+
+        #
+        # now put it back
+        #
+        $self = $fws;
+
+        return %dataSchema;
+        }
+
+
+=head2 setCacheIndex
+
+Set a sites cache index for its site.  you can bas a siteGUID as a hash parameter if you wish to update the index for a site not currently being rendered.
+
+        $fws->setCacheIndex();
+
+=cut
+
+sub setCacheIndex {
+        my ($self,%paramHash) = @_;
+        
+	#
+        # set site GUID if it wasn't passed to us
+        #
+        if ($paramHash{'siteGUID'} eq '') {$paramHash{'siteGUID'} = $self->{'siteGUID'} }
+
+        #
+        # get a list of the elements for the sid
+        #
+        my (@usedElements) = @{$self->runSQL(SQL=>"select distinct element_type from data where site_guid='".$self->safeSQL($paramHash{'siteGUID'})."'")};
+
+        my @indexArray;
+
+        while (@usedElements) {
+
+                #
+                # get the schema for the element
+                #
+                my %schemaHash = $self->schemaHash(shift(@usedElements));
+
+                #
+                #  loop though each one and if the index is set to one, add it to the index list
+                #
+                for my $key ( keys %schemaHash) {
+                        if ($schemaHash{$key}{index} eq '1') { push (@indexArray,$key) }
+                }
+        }
+
+        #
+        # create a comma delemited list that is the inexed fields
+        #
+        my $cacheValue = join(',',@indexArray);
+
+        #
+        # update the extra table of what the cacheIndex is
+        #
+        $self->saveExtra(table=>'site',guid=>$paramHash{'siteGUID'},field=>'dataCacheIndex',$cacheValue);
+        }
+
 =head2 tableFieldHash
 
-Return a multi-dimensional hash of all the fields in a table with its properties.  This usually isn't used by anything but internal table alteration methods, but it could be useful for someone making conditionals to determine the data structure before adding or changing data.
+Return a multi-dimensional hash of all the fields in a table with its properties.  This usually isn't used by anything but internal table alteration methods, but it could be useful if you are making conditionals to determine the data structure before adding or changing data.  The method is CPU intensive so it should only be used when performance is not a requirement.
 
         $tableFieldHashRef = $fws->tableFieldHash('the_table');
 
-        #
-        # the return dump will have the following structure
-        #
-        $hash->{field}{type}
-        $hash->{field}{key}
-        $hash->{field}{ord}
-        $hash->{field}{null}
-        $hash->{field}{default}
-        $hash->{field}{extra}
+The return dump will have the following structure:
 
-        $hash->{field_2}{type}
-        $hash->{field_2}{key}
-        $hash->{field_2}{ord}
-        $hash->{field_2}{null}
-        $hash->{field_2}{default}
-        $hash->{field_2}{extra}
-
-        ...
-
+        $tableFieldHashRef->{field}{type}
+        $tableFieldHashRef->{field}{ord}
+        $tableFieldHashRef->{field}{null}
+        $tableFieldHashRef->{field}{default}
+        $tableFieldHashRef->{field}{extra}
+        
+If the field is indexed it will return a unique table field combination key equal to MUL or FULLTEXT:
+	
+	$tableFieldHashRef->{thetable_field}{key} 
 
 =cut
 
@@ -402,34 +1262,24 @@ sub tableFieldHash {
         my $fieldOrd = 0;
 
         #
-        # TODO CACHE
+        # if we have a cached version lets make one
         #
-        my $tableFieldHash = {};
-
-        #
-        #  if we have a cached version, just return it
-        #
-        if (!keys %$tableFieldHash) {
-                #
-                # we are not pulling this from cache, lets start from scratch
-                #
-                my %tableFieldHash;
-
+        if (!keys %{$self->{'_'.$table.'FieldCache'}}) {
 
                 #
                 # grab the table def hash for mysql
                 #
                 if ($self->{'DBType'} =~ /^mysql$/i) {
-                        my $tableData = $self->runSQL(SQL=>"desc ".$table);
+                        my $tableData = $self->runSQL(SQL=>"desc ".$self->safeSQL($table));
                         while (@$tableData) {
                                 $fieldOrd++;
-                                my $fieldInc                                    = shift(@$tableData);
-                                $tableFieldHash{$fieldInc}{'type'}              = shift(@$tableData);
-                                $tableFieldHash{$fieldInc}{'ord'}               = $fieldOrd;
-                                $tableFieldHash{$fieldInc}{'null'}              = shift(@$tableData);
-                                $tableFieldHash{$table."_".$fieldInc}{'key'}    = shift(@$tableData);
-                                $tableFieldHash{$fieldInc}{'default'}           = shift(@$tableData);
-                                $tableFieldHash{$fieldInc}{'extra'}             = shift(@$tableData);
+                                my $fieldInc  			                                  = shift(@$tableData);
+                                $self->{'_'.$table.'FieldCache'}->{$fieldInc}{'type'}              = shift(@$tableData);
+                                $self->{'_'.$table.'FieldCache'}->{$fieldInc}{'ord'}               = $fieldOrd;
+                                $self->{'_'.$table.'FieldCache'}->{$fieldInc}{'null'}              = shift(@$tableData);
+                                $self->{'_'.$table.'FieldCache'}->{$table."_".$fieldInc}{'key'}    = shift(@$tableData);
+                                $self->{'_'.$table.'FieldCache'}->{$fieldInc}{'default'}           = shift(@$tableData);
+                                $self->{'_'.$table.'FieldCache'}->{$fieldInc}{'extra'}             = shift(@$tableData);
                         }
                 }
 
@@ -437,35 +1287,114 @@ sub tableFieldHash {
                 # grab the table def hash for sqlite
                 #
                 if ($self->{'DBType'} =~ /^sqlite$/i) {
-                        my $tableData = $self->runSQL(SQL=>"PRAGMA table_info(".$table.")");
+                        my $tableData = $self->runSQL(SQL=>"PRAGMA table_info(".$self->safeSQL($table).")");
                         while (@$tableData) {
-                                                                        shift(@$tableData);
-                                my $fieldInc =                          shift(@$tableData);
-                                                                        shift(@$tableData);
-                                                                        shift(@$tableData);
-                                                                        shift(@$tableData);
-                                $tableFieldHash{$fieldInc}{'type'} =    shift(@$tableData);
-
                                 $fieldOrd++;
-                                $tableFieldHash{$fieldInc}{'ord'}       = $fieldOrd;
+        		                                                                shift(@$tableData);
+                                my $fieldInc =  		                        shift(@$tableData);
+                       		                                	                shift(@$tableData);
+                               		                                	        shift(@$tableData);
+                                       		                                	shift(@$tableData);
+                                $self->{'_'.$table.'FieldCache'}->{$fieldInc}{'type'} =  shift(@$tableData);
+                                $self->{'_'.$table.'FieldCache'}->{$fieldInc}{'ord'}  = $fieldOrd;
                         }
 
-                        $tableData = $self->runSQL(SQL=>"PRAGMA index_list(".$table.")");
+                        $tableData = $self->runSQL(SQL=>"PRAGMA index_list(".$self->safeSQL($table).")");
                         while (@$tableData) {
-                                                        shift(@$tableData);
-                                my $fieldInc =          shift(@$tableData);
-                                                        shift(@$tableData);
+                                                        				shift(@$tableData);
+                                my $fieldInc =          				shift(@$tableData);
+                                                        				shift(@$tableData);
 
-                                $tableFieldHash{$fieldInc}{"key"} = "MUL";
+                                $self->{'_'.$table.'FieldCache'}->{$fieldInc}{"key"} = 	"MUL";
                         }
                 }
-                return \%tableFieldHash;
         }
-        else {
-                #
-                # TODO SAVE CACHE
-                #
+	return %{$self->{'_'.$table.'FieldCache'}};
+
+}
+
+
+
+=head2 updateDataCache
+
+Update the cache version of the data record.  This is called automatically when saveData is called.
+
+        $fws->updateDataCache(%theDataHash);
+
+=cut
+
+
+sub updateDataCache {
+        my ($self,%dataHash) = @_;
+
+        #
+        # get the field hash so we don't have to try to add fields that might not be there EVERY time
+        #
+        my %tableFieldHash = $self->tableFieldHash("data_cache");
+
+        #
+        # set the page id of the guid for easy access on search pages
+        #
+        $dataHash{'pageIdOfElement'} = $self->getPageGUID($dataHash{'guid'});
+
+        #
+        # get the page hash of the page, and update the page description to the data for easy access on search pages
+        #
+        my %pageHash = $self->dataHash(guid=>$dataHash{'pageIdOfElement'});
+        $dataHash{'pageDescription'} = $pageHash{'pageDescription'};
+
+        #
+        # get what fields we are aloud to use
+        #
+        my %dataCacheFields = %{$self->{"dataCacheFields"}};
+
+        #
+        # we will be building these up while we loop
+        #
+        my $fields = '';
+        my $values = '';
+
+        #
+        # make any fields that "might" be needed
+        #
+        foreach my $key ( keys %dataHash ) {
+                if ($dataCacheFields{$key} eq '1' || $key eq 'site_guid' || $key eq 'guid' || $key eq 'name' || $key eq 'title' || $key eq 'pageIdOfElement' || $key eq 'pageDescription') {
+
+                        #
+                        # if the type is blank, then this is new
+                        #
+                        if ($tableFieldHash{$key}{'type'} eq '') {
+                                #
+                                # alter tha table
+                                #
+                                $self->alterTable(table=>"data_cache",field=>$key,type=>"text",key=>"FULLTEXT",default=>"");
+                        }
+
+
+
+                        #
+                        # append the new data to the strings we are using to create the insert statement
+                        #
+                        $fields .= $self->safeSQL($key).',';
+                        $values .= "'".$self->safeSQL($dataHash{$key})."',";
+		}
         }
+
+        #
+        # clean up the commas at the end of values and fields
+        #
+        $fields =~ s/,$//sg;
+        $values =~ s/,$//sg;
+
+        #
+        # remove the one that "might" be there
+        #
+        $self->runSQL(SQL=>"delete from data_cache where guid='".$self->safeSQL($dataHash{'guid'})."'");
+
+        #
+        # add the the new one
+        #
+        $self->runSQL(SQL=>"insert into data_cache (".$fields.") values (".$values.")");
 }
 
 
@@ -474,6 +1403,8 @@ sub tableFieldHash {
 Alter the database to match the schema for FWS 2.   The return will print the SQL statements used to adjust the tables.
 
 	print $fws->updateDatabase()."\n";
+
+This method is automatically called when on the web optimized version of FWS when rendering the 'System' screen.
 
 =cut
 
@@ -880,7 +1811,7 @@ sub updateDatabase {
                 "trans_item","extra_value"              ,"text"         ,""             ,"");
 
         #
-        # loop though the records and make the tables
+        # loop though the records and make or update the tables
         #
         my $dbResponse;
         while (@defs) {
@@ -903,8 +1834,213 @@ sub updateDatabase {
 }
 
 
+=head2 updateModifiedDate
+
+Update the modified date of the page a dataHash element resides on.
+
+        $fws->updateModifiedDate(%dataHash);
+
+Note: By updating anything that is persistant against multiple pages all pages will have thier date updated as it is considered a site wide change.
+
+=cut
+
+sub updateModifiedDate {
+        my ($self,%paramHash) = @_;
+
+        #
+        # it is default or not
+        #
+        if ($paramHash{'siteGUID'} eq '') { $paramHash{'siteGUID'} = $self->{'siteGUID'} }
+
+        #
+        # set the type to page if the id itself is a page
+        #
+        my ($type) = @{$self->runSQL(SQL=>"select element_type from data where guid='".$self->safeSQL($paramHash{'guid'})."' and site_guid='".$self->safeSQL($paramHash{'siteGUID'})."'")};
+
+        #
+        # if its not page loop though till it finds what page its on
+        #
+        my $isDefault = 0;
+        my $recurCap = 0;
+        while ($paramHash{'guid'} ne '' && ($type ne 'page' || $type ne 'home') && $recurCap < 100) {
+                my ($defaultElement) = @{$self->runSQL(SQL=>"select default_element from data where guid='".$self->safeSQL($paramHash{'guid'})."' and site_guid='".$self->safeSQL($paramHash{'siteGUID'})."'")};
+                ($paramHash{'guid'},$type) = @{$self->runSQL(SQL=>"select parent,data.element_type from guid_xref left join data on data.guid=parent where child='".$self->safeSQL($paramHash{'guid'})."' and guid_xref.site_guid='".$self->safeSQL($paramHash{'siteGUID'})."'")};
+                if (!$isDefault && $defaultElement) { $isDefault = 1 }
+                $recurCap++;
+        }
+
+        #
+        # if id is blank that means we are updating a home page element
+        #
+        if ($type eq '' || $isDefault > 0 || $isDefault < 0) {
+                $self->saveExtra(table=>'data',siteGUID=>$paramHash{'siteGUID'},field=>'dateUpdated',value=>time);
+        }
+
+        #
+        # if is default then update ALL pages
+        #
+        if ($isDefault) {
+                $self->saveExtra(table=>'data',siteGUID=>$paramHash{'siteGUID'},field=>'dateUpdated',value=>time);
+                my @pageList = @{$self->runSQL(SQL=>"select guid from data where data.site_guid='".$self->safeSQL($paramHash{'siteGUID'})."' and (data.element_type='page' or data.element_type='home')")};
+                while (@pageList) {
+                        my $pageId = shift(@pageList);
+                        $self->saveExtra(table=>'data',siteGUID=>$paramHash{'siteGUID'},guid=>$pageId,field=>'dateUpdated',value=>time);
+                }
+        }
+
+        #
+        # if the type is page, then just update that page
+        #
+        if ($type eq 'page' || $type eq 'home') {
+                $self->saveExtra(table=>'data',siteGUID=>$paramHash{'siteGUID'},guid=>$paramHash{'guid'},field=>'dateUpdated',value=>time);
+        }
+}
 
 
+
+
+
+############################################################################################
+# DATA: Delete a guid XRef
+############################################################################################
+
+sub _deleteXRef {
+        my ($self,$child,$parent,$site_guid) = @_;
+        $self->runSQL(SQL=>"delete from guid_xref where child='".$self->safeSQL($child)."' and parent='".$self->safeSQL($parent)."' and site_guid='".$self->safeSQL($site_guid)."'");
+}
+
+############################################################################################
+# DATA: Lookup all the elements and return the hash
+############################################################################################
+
+sub _fullElementHash {
+        my ($self,%paramHash) = @_;
+
+        if (!keys %{$self->{'_fullElementHashCache'}}) {
+
+                #
+                # set the site guid depending on the context
+                #
+                my $site_guid = $self->{'siteGUID'};
+
+                #
+                # if your in an admin page, you will need this so you can see the stuff in scope for the tree views
+                # it doesn't matter if it caches it, because these are ajax calls limited only to themselves
+                #
+                my $addToWhere = "(site_guid=\"".$self->safeSQL($self->fwsGUID())."\" and public=\"1\") or ";
+                if ($self->formValue('site_guid') ne "") { $addToWhere = ""; $site_guid = $self->formValue("site_guid") }
+
+
+                #
+                # get the elementArray
+                #
+                my $elementArray = $self->runSQL(SQL=>"select guid,type,class_prefix,css_devel,css_live,js_devel,js_live,schema_devel,title,tags,parent,ord,site_guid,root_element,public,script_live,script_devel,checkedout from element where ".$addToWhere." site_guid='".$self->safeSQL($site_guid)."' order by title");
+                my $alphaOrd = 0;
+                while (@$elementArray) {
+                        $alphaOrd++;
+                        my $guid                                                        = shift(@$elementArray);
+                        my $type                                                        = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'alphaOrd'}           = $alphaOrd;
+                        $self->{'_fullElementHashCache'}->{$guid}{'class_prefix'}       = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'css_devel'}          = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'css_live'}           = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'js_devel'}           = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'js_live'}            = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'data_schema'}        = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'type'}               = $type;
+                        $self->{'_fullElementHashCache'}->{$guid}{'title'}              = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'tags'}               = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'parent'}             = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'ord'}                = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'site_guid'}          = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'root_element'}       = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'public'}             = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'script_live'}                = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'script_devel'}       = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'checkedout'}         = shift(@$elementArray);
+
+
+
+                        if ($type ne '') {
+                                $self->{'_fullElementHashCache'}->{$type}{'guid'}       = $guid;
+                                $self->{'_fullElementHashCache'}->{$type}{'parent'}     = $self->{'_fullElementHashCache'}->{$guid}{'parent'};
+                        }
+                }
+        }
+        return %{$self->{'_fullElementHashCache'}};
+}
+
+
+############################################################################################
+# FORMAT: Pass keywords and field list, and create a wellformed where statement for keyword
+#         searches
+############################################################################################
+
+sub _getKeywordSQL {
+        my ($self,$keywords,@likeFields) = @_;
+        #
+        # Grab everything that is in quotes
+        #
+        my @exactMatches = ();
+        while ($keywords =~ /"/) {
+                $keywords =~ /(".*?")/g;
+                my $currentMatch = $1;
+                $keywords =~ s/$currentMatch//g;
+                $currentMatch =~ s/"//g;
+                push (@exactMatches,$currentMatch);
+        }
+
+        #
+        # split them up and add the exact matches
+        #
+        my @keywordsSplit = split(' ',$keywords);
+        push (@keywordsSplit,@exactMatches);
+
+
+        #
+        # build the SQL
+        #
+        my $keywordSQL ='';
+        foreach my $keyword (@keywordsSplit) {
+                if ($keyword ne '') {
+                        my $fieldSQL = '';
+                        foreach my $likeField (@likeFields) {
+                                $fieldSQL .= $self->safeSQL($likeField)." LIKE '%".
+                                $self->safeSQL($keyword)."%' or ";
+                                }
+                        $fieldSQL =~ s/ or $//sg;
+                        if ($fieldSQL ne '') {
+                                $keywordSQL .= "( ".$fieldSQL." )";
+                                $keywordSQL .= " and ";
+                        }
+                }
+        }
+
+        #
+        # kILL THE last and and then wrap it in parans so it will fit will in sql statements
+        #
+        $keywordSQL =~ s/ and $//sg;
+        return $keywordSQL;
+}
+
+############################################################################################
+# DATA: Save a guid XRef
+############################################################################################
+
+sub _saveXRef {
+        my ($self,$child,$layout,$ord,$parent,$site_guid) = @_;
+
+	#
+	# delete the old one if its there
+	#
+        $self->_deleteXRef($child,$parent,$site_guid);
+
+	#
+	# add the new one
+	#
+        $self->runSQL(SQL=>"insert into guid_xref (child,layout,ord,parent,site_guid) values ('".$self->safeSQL($child)."','".$self->safeSQL($layout)."','".$self->safeSQL($ord)."','".$self->safeSQL($parent)."','".$self->safeSQL($site_guid)."')");
+
+}
 
 =head1 AUTHOR
 

@@ -5,7 +5,7 @@ use strict;
 
 =head1 NAME
 
-FWS::V2::Safety - Framework Sites version 2 context safe methods
+FWS::V2::Safety - Framework Sites version 2 safe data wrappers
 
 =head1 VERSION
 
@@ -36,7 +36,7 @@ our $VERSION = '0.001';
 
 =head1 DESCRIPTION
 
-FWS version 2 safety methods are used for security when using unknown parameters that could be malicious.   Whenever data is passed to another method it should be wrapped in its appropriate safety method under the guidance of each method.
+FWS version 2 safety methods are used for security when using unknown parameters that could be malicious.   Whenever data is passed to another method it should be wrapped in its appropriate safety wrapper under the guidance of each method.
 
 
 =head1 METHODS

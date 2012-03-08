@@ -1,5 +1,12 @@
 Revision history for FWS-V2
 
+0.004 
+ - Basic data table and caching mechanics added
+ - Most of the site wide settings installed for general testing
+ - Added securityHash to constructor
+ - Autorunning updateDatabase on failed SQL
+ - Added many legacy methods
+
 0.003 2012-02-28
  - Added updateDatabase
 

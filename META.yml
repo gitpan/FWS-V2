@@ -18,7 +18,11 @@ no_index:
     - t
     - inc
 requires:
+  CGI: 0
+  Crypt::Blowfish: 0
   DBI: 0
   Digest::SHA1: 0
+  Storable: 0
   Test::More: 0
-version: 0.003
+  Time::Local: 0
+version: 0.004

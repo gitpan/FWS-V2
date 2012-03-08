@@ -90,6 +90,229 @@ sub fileArray {
 }
 
 
+=head2 runInit
+
+Run init scripts for a site.  This can only be used after setSiteValues() or setSiteFiendly() is called.
+
+        $fws->runInit();
+
+=cut
+
+sub runInit {
+        my ($self) = @_;
+	$self->runScript('init');
+}	
+
+=head2 runScript
+
+Run a FWS element script.  This should not be used outside of the FWS core.  There is no recursion or security checking and should not be used inside of elements to perfent possible recursion.   Only use this if you are absolutly sure of the script content and its safety.
+
+        %valueHash = $fws->runScript('scriptName',%valueHash);
+
+=cut
+
+sub runScript {
+        my ($self,$scriptID,%valueHash) = @_;
+
+        #
+        # if we have a cached version lets make one
+        #
+        if (!keys %{$self->{'_siteScriptCache'}}) {
+                my $scriptArray = $self->runSQL(SQL=>"select element.type,element.script_devel from element left join site on element.site_guid=site.guid where element.type <> '' and site.sid ='".$self->safeSQL($self->{'siteId'})."' order by element.ord");
+                while (@$scriptArray) {
+                        my $scriptGUID                                  = shift(@$scriptArray);
+
+			#
+			# append them together if they are the script id (multipule inits....)
+			#
+                        $self->{'_siteScriptCache'}->{$scriptGUID}      .= shift(@$scriptArray);
+                }
+        }
+
+        #
+        # copy the self object to fws
+        #
+        my $fws = $self;
+
+        #
+        # if the script hash exists, do it up!
+        #
+        if (exists $self->{'_siteScriptCache'}->{$scriptID}) {
+                eval $self->{'_siteScriptCache'}->{$scriptID};
+                my $errorCode = $@;
+                if ($errorCode) { $self->FWSLog($scriptID,$errorCode) }
+        }
+
+        #
+        # now put it back
+        #
+        $self = $fws;
+
+        #
+        # return the valueHash back in case the script altered it
+        #
+        return %valueHash;
+}
+
+
+=head2 FWSDecrypt
+
+Decrypt data if a site has the proper configuration
+
+        my $decryptedData = $fws->FWSDecrypt('alsdkjfalkj230948lkjxldkfj');
+
+=cut
+
+sub FWSDecrypt {
+        my ($self,$encData)= @_;
+
+        if ($self->{'encryptionType'} =~ /blowfish/i) {
+                require Crypt::Blowfish;
+                Crypt::Blowfish->import();
+                my $cipher1 = Crypt::Blowfish->new(substr($self->{'encryptionKey'},0,56));
+                my $cipher2 = Crypt::Blowfish->new(substr($self->{'encryptionKey'},57,56));
+                my $cipher3 = Crypt::Blowfish->new(substr($self->{'encryptionKey'},111,56));
+                my $data = pack("H*",$encData);
+                my $dec = '';
+                while (length($data) > 0)  {
+                        my $len = length($data);
+                        $dec .= $cipher3->decrypt(substr($data,0,8));
+                        if ($len > 8) {$data = substr($data,8)} else {$data = ""}
+                }
+                $data = $dec;
+                $dec = '';
+                while (length($data) > 0)  {
+                        my $len = length($data);
+                        $dec .= $cipher2->decrypt(reverse(substr($data,0,8)));
+                        if ($len > 8) {$data = substr($data,8)} else {$data = ""}
+                }
+                $data = $dec;
+                $dec = '';
+                my $size = substr($data,0,8);
+                $data = substr($data,8);
+                while (length($data) > 0)  {
+                        my $len = length($data);
+                        $dec .= $cipher1->decrypt(substr($data,0,8));
+                        if ($len > 8) {$data = substr($data,8)} else {$data = ""}
+                }
+                $encData = substr($dec, 0, $size);
+        }
+        return $encData;
+}
+
+
+
+=head2 FWSEncrypt
+
+Encrypt data if a site has the proper configuration
+
+	my $encryptedData = $fws->FWSEncrypt('encrypt this stuff');
+
+=cut
+
+sub FWSEncrypt {
+        my ($self,$data)= @_;
+        my $enc = '';
+
+        if ($self->{'encryptionType'} =~ /blowfish/i) {
+                require Crypt::Blowfish;
+                Crypt::Blowfish->import();
+                my $cipher1 = Crypt::Blowfish->new(substr($self->{'encryptionKey'},0,56));
+                my $cipher2 = Crypt::Blowfish->new(substr($self->{'encryptionKey'},57,56));
+                my $cipher3 = Crypt::Blowfish->new(substr($self->{'encryptionKey'},111,56));
+                my $fullLength = length($data);
+                while (length($data) > 0)  {
+                        my $len = length($data);
+                        if ($len < 8) { $data .= "\000"x(8-$len) }
+                        $enc .= $cipher1->encrypt(substr($data,0,8));
+                        if ($len > 8) {$data = substr($data,8)} else {$data = ''}
+                }
+                $fullLength = sprintf("%8d", $fullLength);
+                $fullLength=~ tr/ /0/;
+                $data = $fullLength.$enc;
+                $enc = '';
+                while (length($data) > 0)  {
+                        my $len = length($data);
+                        $enc .= $cipher2->encrypt(reverse(substr($data,0,8)));
+                        if ($len > 8) {$data = substr($data,8)} else {$data = ''}
+                }
+                $data = $enc;
+                $enc = '';
+                while (length($data) > 0)  {
+                        my $len = length($data);
+                        $enc .= $cipher3->encrypt(substr($data,0,8));
+                        if ($len > 8) {$data = substr($data,8)} else {$data = ''}
+                }
+                $data = unpack("H*",$enc);
+        }
+        return $data;
+}
+
+
+=head2 FWSLog
+
+Append something to the FWS.log file if FWSLogLevel is set to 1 which is default.
+
+        #
+        # Soemthing is happening
+        #
+        $fws->FWSLog("this is happening\nthis is a new log line");
+
+If a multi line string is passed it will break it up in to more than one log entries.
+
+=cut
+
+sub FWSLog{
+        my ($self,$module,$errorText) = @_;
+        if ($self->{'FWSLogLevel'} > 0) {
+                open(FILE, ">>".$self->{'fileSecurePath'}."/FWS.log");
+
+                #
+                # if you only pass it one thing, lets set it up so it will display
+                #
+                if (!defined $errorText) {
+                        $errorText = $module;
+                        $module = 'FWS';
+                }
+
+                #
+                # split up the lines so we can pass a whole bunch and have them format each on one line
+                #
+                my @resultLines = split /\n/, $errorText;
+                foreach my $resultLine (@resultLines) {
+                        if ($resultLine ne '') {
+                                print FILE $ENV{"REMOTE_ADDR"}." - [".$self->dateTime(format=>"apache"). "] ".$module.": ".$resultLine." [".$ENV{"SERVER_NAME"}.$ENV{"REQUEST_URI"}."]\n";
+                        }
+                }
+                close(FILE);
+        }
+}
+
+
+=head2 SQLLog
+
+Append something to the SQL.log file if SQLLogLevel is set to 1 or 2.   Level 1 will log anything that updates a database record, and level 2 will log everything.  In good practice this should not be used, as all SQL statements are ran via the runSQL method which applies SQLLog.
+
+        #
+        # Soemthing is happening
+        #
+        $fws->SQLLog($theSQLStatement);
+
+=cut
+
+
+sub SQLLog{
+        my ($self,$SQL) = @_;
+        if ($self->{'SQLLogLevel'} > 0) {
+                open(FILE, ">>".$self->{'fileSecurePath'}."/SQL.log");
+                if (($self->{'SQLLogLevel'} eq '1' && ($SQL =~/^insert/i || $SQL=~/^delete/i || $SQL=~/^update/i || $SQL=~/^alter/i)) || $self->{'SQLLogLevel'} eq '2') {
+                        print FILE $ENV{"REMOTE_ADDR"}." - [".$self->dateTime(format=>"apache"). "] ".$SQL." [".$ENV{"SERVER_NAME"}.$ENV{"REQUEST_URI"}."]\n";
+                }
+                close(FILE);
+        }
+}
+
+
 =head1 AUTHOR
 
 Nate Lewis, C<< <nlewis at gnetworks.com> >>
