@@ -2,7 +2,6 @@ package FWS::V2::File;
 
 use 5.006;
 use strict;
-use warnings;
 
 =head1 NAME
 
@@ -36,6 +35,100 @@ Framework Sites version 2 file writing, reading and manipulation methods.
 
 
 =head1 METHODS
+
+=head2 createSizedImages
+
+Create all of the derived images from a file upload based on its schema definition
+
+	my %dataHashToUpdate = $fws->dataHash(guid=>'someGUIDThatHasImagesToUpdate');
+	$fws->createSizedImages(%dataHashToUpdate);
+
+=cut
+
+sub createSizedImages {
+        my ($self,%paramHash) = @_;
+
+        #
+        # going to need the current hash plus its derived schema to figure out what we should be making
+        #
+        my %dataHash    = $self->dataHash(guid=>$paramHash{'guid'});
+        my %dataSchema  = $self->schemaHash($dataHash{'type'});
+
+        #
+        # if site_guid is blank, lets get the one of the site we are on
+        #
+        if ($paramHash{'siteGUID'} eq '') { $paramHash{'siteGUID'} = $self->{'siteGUID'} }
+
+        #
+        # bust though all the fields and see if we need to do anything with them
+        #
+        for my $field ( keys %dataHash ) {
+
+                #
+                # for non secure files lets prune the 640,custom, and thumb fields
+                #
+                my $dataType = $dataSchema{$field}{fieldType};
+                if ($dataType eq 'file' || $dataType eq 'secureFile') {
+
+                        #
+                        # get just the file name... we will use this a few times
+                        #
+                        my $fileName = $self->justFileName($dataHash{$field});
+
+                        #
+                        # set the file path based on secure or not
+                        #
+                        my $dirPath = $self->{'filePath'};
+                        if ($dataType eq 'secureFile') { $dirPath = $self->{'fileSecurePath'} }
+
+			#
+                        # check for thumb creation... if so lets do it!
+                        #
+                        for my $fieldName ( keys %dataSchema ) {
+                                if ($dataSchema{$fieldName}{'fieldParent'} eq $field && $dataSchema{$fieldName}{'fieldParent'} ne '' ){
+
+                                        #
+                                        # A directive to create a new image exists!  lets figure out where and how, and do it
+                                        #
+                                        my $directory           = $self->safeDir($dirPath.'/'.$paramHash{'siteGUID'}.'/'.$paramHash{'guid'});
+                                        my $newDirectory        = $self->safeDir($dirPath.'/'.$paramHash{'siteGUID'}.'/'.$paramHash{'guid'}.'/'.$fieldName);
+                                        my $newFile             = $newDirectory."/".$fileName;
+                                        my $webFile             = $self->{'fileWebPath'}.'/'.$paramHash{'siteGUID'}.'/'.$paramHash{'guid'}.'/'.$fieldName.'/'.$fileName;
+
+                                        #
+                                        # make the image width 100, if its not specified
+                                        #
+                                        if ($dataSchema{$fieldName}{'imageWidth'} < 1) { $dataSchema{$fieldName}{'imageWidth'} = 100 }
+
+                                        #
+                                        # Make the subdir if its not already there
+                                        #
+                                        $self->makeDir($newDirectory ,0755);
+
+                                        #
+                                        # create the new image
+                                        #
+                                        $self->saveImage(sourceFile=>$directory.'/'.$fileName,fileName=>$newFile,width=>$dataSchema{$fieldName}{'imageWidth'});
+
+                                        #
+                                        # if its a secure file, we only save it from site guid on...
+                                        #
+                                        if ($dataType eq 'secureFile') { $webFile = '/'.$paramHash{'siteGUID'}.'/'.$paramHash{'guid'}.'/'.$fileName }
+
+                                        #
+                                        # if the new image is not there, then lets blank out the file
+                                        #
+                                        if (!-e $newFile) { $webFile = '' }
+					
+                                        #
+                                        # save a blank one, or save a good one
+                                        #
+                                        $self->saveExtra(table=>'data',siteGUID=>$paramHash{'siteGUID'},guid=>$paramHash{'guid'},field=>$fieldName,value=>$webFile);
+                                }
+                        }
+                }
+        }
+}
 
 =head2 fileArray
 
@@ -89,6 +182,59 @@ sub fileArray {
         return \@fileHashArray;
 }
 
+=head2 makeDir
+
+Make a new directory with built in safety mechanics.   If the directory is not under the filePath or fileSecurePath then nothing will be created.
+
+        $fws->makeDir( $self->{'filePath'}.'/thisNewDir' );
+
+=cut
+
+sub makeDir {
+        my ($self,$directory) = @_;
+
+        #
+        # to make sure nothing fishiy is going on, you should only be making dirs under this area
+        #
+        my $filePath = $self->{'filePath'};
+        my $fileSecurePath  = $self->{'fileSecurePath'};
+        if ($directory =~ /^$filePath/ || $directory =~ /^$fileSecurePath/ ) {
+
+                #
+                # kill double ..'s so noobdy tries to leave our tight environment of security
+                #
+                $directory = $self->safeDir($directory);
+
+                #
+                # eat the leading / if it exists ... and it should (this is for the split
+                #
+                $directory =~ s/^\///sg;
+
+                #
+                # create an array we can loop though to rebuild it making them on the fly
+                #
+                my @directories = split(/\//,$directory);
+
+                #
+                # delete the $directory because we will rebuild it
+                #
+                $directory = '';
+
+                #
+                # loop though each one making them if they need to
+                #
+                foreach my $thisDir (@directories) {
+                        #
+                        # make the dir and send a debug message
+                        #
+                        $directory .= '/'.$thisDir;
+                        mkdir($directory ,0755);
+                        $self->debug($directory ,'makeDir');
+                }
+        }
+
+        else { $self->FWSLog("MKDIR trying to make directory not in tree: ".$directory) }
+}
 
 =head2 runInit
 
@@ -154,6 +300,76 @@ sub runScript {
         return %valueHash;
 }
 
+
+=head2 saveImage
+
+Save an image with a unique width or height.  The file will be converted to extensions graphic type of the fileName passed.   Source, fileName and either width or height is required.
+
+	#
+	# convert this png, to a jpg that is 110x110
+	#
+        $fws->saveImage(	sourceFile=>'/somefile.png',
+				fileName=>'/theNewFile.jpg',
+				width=>'110',
+				height=>'110');
+
+=cut
+
+sub saveImage {
+        my ($self,%paramHash) = @_;
+
+        #
+        # use GD in trueColor mode
+        #
+        use GD();
+        GD::Image->trueColor(1);
+
+        #
+        # create new image
+        #
+        my $image = GD::Image->new($paramHash{'sourceFile'});
+
+
+        #
+        # if we truely have an image lets continue if not, lets pretend this didn't even happen
+        #
+        if (defined $image) {
+
+                #
+                # get current widht/height for mat to resize
+                #
+                my ($width,$height) = $image->getBounds();
+
+                #
+                # do math to get new width/height
+                #
+                if (!$paramHash{'height'}) { $paramHash{'height'} = $paramHash{'width'} / $width * $height }
+                if (!$paramHash{'width'}) { $paramHash{'width'} = $paramHash{'height'} / $height * $width }
+
+                #
+                # make sure size is at least 1
+                #
+                if ($paramHash{'width'} < 1) { $paramHash{'width'} = 1 }
+                if ($paramHash{'height'} < 1) { $paramHash{'height'} = 1 }
+
+                #
+                # Resize image and save to a file using proper mime type
+                #
+                my $resizedImage = new GD::Image($paramHash{'width'},$paramHash{'height'});
+                $resizedImage->copyResampled($image,0,0,0,0,$paramHash{'width'},$paramHash{'height'},$width,$height);
+                open    IMG, ">".$paramHash{'fileName'} or die "Error:". $!;
+                binmode IMG;
+
+                #
+                # save as what ever extnesion was passed for the name
+                #
+                if ($paramHash{'fileName'} =~ /\.(jpg|jpeg|jpe)$/i) {   print IMG $resizedImage->jpeg() }
+                if ($paramHash{'fileName'} =~ /\.png$/i) {              print IMG $resizedImage->png() }
+                if ($paramHash{'fileName'} =~ /\.gif$/i) {              print IMG $resizedImage->gif() }
+                close   IMG;
+
+        }
+}
 
 =head2 FWSDecrypt
 

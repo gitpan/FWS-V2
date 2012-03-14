@@ -1,6 +1,13 @@
 Revision history for FWS-V2
 
-0.004 
+0.005 2012-03-14
+ - Added dataDelete()
+ - Added an option for dateTime() to change set the default date separator
+ - Added new parameter sessionCookieName to allow unique cookie names for sessions
+ - Added default image manipulation methods 
+ - Minor bug fixes
+
+0.004 2012-02-08 
  - Basic data table and caching mechanics added
  - Most of the site wide settings installed for general testing
  - Added securityHash to constructor

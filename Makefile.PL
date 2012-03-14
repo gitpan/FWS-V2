@@ -19,6 +19,7 @@ WriteMakefile(
         'Time::Local'		=> 0,
         'Storable'		=> 0,
         'Crypt::Blowfish'	=> 0,
+        'GD'			=> 0,
 	'Digest::SHA1'  	=> 0
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },

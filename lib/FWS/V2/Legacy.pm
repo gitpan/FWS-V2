@@ -5,7 +5,7 @@ use strict;
 
 =head1 NAME
 
-FWS::V2::Legacy - Framework Sites version 2 compatibility methods
+FWS::V2::Legacy - Framework Sites version 2 compatibility and legacy methods and translations
 
 =head1 VERSION
 
@@ -57,6 +57,19 @@ sub adminPageId {
         return $self->{"adminURL"};
 }
 
+=head2 adminPassword
+
+Should be set when calling new().  This is only used for internal security for the first time log in, and is disabled once an admin account is created
+
+=cut
+
+sub adminPassword {
+        my ( $self, $adminPassword ) = @_;
+        if (defined $adminPassword) { $self->{"adminPassword"} = $adminPassword; }
+        return $self->{"adminPassword"};
+}
+
+
 =head2 affiliateId
 
 Is set by passing 'a' as a form value. Can be accessed via $fws->{'affiliateId'}; 
@@ -104,17 +117,28 @@ sub email {
         return $self->{"email"};
 }
 
-=head2 showDateTime
 
-Deprecated, use dateTime()
+=head2 dataCacheFields
+
+Deprecated. Internal only but was exported at one point so it is here for compatability
 
 =cut
 
-sub showDateTime {
-        my %paramHash;
-	my $self;
-        ($self,$paramHash{'format'},$paramHash{'monthMod'},$paramHash{'epochTime'},$paramHash{'GMTOffset'},$paramHash{'SQLTime'}) = @_;
-        return $self->dateTime(%paramHash);
+sub dataCacheFields {
+        my ( $self, %dataCacheFields ) = @_;
+        if (keys %dataCacheFields) { %{$self->{"dataCacheFields"}} = %dataCacheFields; }
+        return %{$self->{"dataCacheFields"}};
+}
+
+=head2 debug
+
+Deprecated. All logging is handled via $fws->FWSLog.
+
+=cut
+
+sub debug { 
+	my ( $self ) = @_; 
+	return '';
 }
 
 =head2 domain
@@ -260,6 +284,43 @@ sub gatewayUserID {
 	return $self->{"gatewayUserID"};
 }
 
+=head2 googleAppsKeyFile
+
+Should be set when calling new() and can be accessed via $fws->{'googleAppsKeyFile'}; 
+
+=cut
+
+sub googleAppsKeyFile {
+        my ( $self, $googleAppsKeyFile ) = @_;
+        if (defined $googleAppsKeyFile) { $self->{"googleAppsKeyFile"} = $googleAppsKeyFile; }
+        return $self->{"googleAppsKeyFile"};
+}
+
+=head2 skipIpCheckOnLogin
+
+Deprecated, session management was updated to improve ip checking to make this no longer required.
+
+=cut
+
+sub skipIpCheckOnLogin { 
+	my ( $self ) = @_; 
+	return 0; 
+}
+
+
+=head2 showDateTime
+
+Deprecated, use dateTime()
+
+=cut
+
+sub showDateTime {
+        my %paramHash;
+	my $self;
+        ($self,$paramHash{'format'},$paramHash{'monthMod'},$paramHash{'epochTime'},$paramHash{'GMTOffset'},$paramHash{'SQLTime'}) = @_;
+        return $self->dateTime(%paramHash);
+}
+
 =head2 pageIdOfElement
 
 Method name changed, use $fws->getPageGUID('theguid')
@@ -331,6 +392,18 @@ sub secureDomain {
         return $self->{"secureDomain"};
 }
 
+=head2 securePageHash
+
+Depricated.  All secure page references are done manually for performance and unique logic restrictions.
+
+=cut
+
+sub securePageHash {
+        my ( $self ) = @_;
+        return ();
+}
+
+
 =head2 sendMailBin
 
 Should be set when calling new() and can be accessed via $fws->{'sendmailBin'};
@@ -391,6 +464,19 @@ sub siteName {
         if (defined $siteName) { $self->{"siteName"} = $siteName; }
         return $self->{"siteName"};
 }
+
+=head2 tinyMCEEnable
+
+Should be set when calling new() and can be accessed via $fws->{'tinyMCEEnable'};
+
+=cut
+
+sub tinyMCEEnable {
+        my ( $self, $tinyMCEEnable ) = @_;
+        if (defined $tinyMCEEnable) { $self->{"tinyMCEEnable"} = $tinyMCEEnable; }
+        return $self->{"tinyMCEEnable"};
+}
+
 
 =head2 queryHead
 

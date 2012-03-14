@@ -35,7 +35,7 @@ FWS version 2 core network methods
 
 Post HTTP or HTTPS and return the result to a hash reference containing the results plus the parameters provided.
 
-        my $responseRef = $fws->HTTPRequest(	url	=>'http://www.cpan.org' # only required paramater
+        my $responseRef = $fws->HTTPRequest(	url	=>'http://www.cpan.org' # only required parameter
 						type	=>'get'			# default is get [get|post]
 						user	=>'theUser'		# if needed for auth
 						password=>'thePass'		# if needed for auth 

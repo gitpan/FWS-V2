@@ -4,8 +4,8 @@ use 5.006;
 use strict;
 
 =head1 NAME
-
-FWS::V2::Database - Framework Sites version 2 common database methods
+pulation
+FWS::V2::Database - Framework Sites version 2 data management
 
 =head1 VERSION
 
@@ -312,6 +312,8 @@ Any combination of the following parameters will restrict the results.  At least
 
 =item * childGUID: Retrieve any element whose child element is the guid (This option can not be used with keywords attribute)
 
+=item * showAll: Show active and inactive records. By default only active records will show
+
 =back
 
 Note: guid and containerId cannot be used at the same time, as they both specify the parent your pulling the array from
@@ -483,7 +485,7 @@ sub dataArray {
         # for speed we will add this to here so we don't have to ask it EVERY single time we loop though the while statemnent
         #
         my $showMePlease = 0;
-        if (($self->formValue('editMode') eq '1' || $self->formValue('p') =~ /^fws_/) ) { $showMePlease =1 }
+        if (($paramHash{'showAll'} eq '1' || $self->formValue('editMode') eq '1' || $self->formValue('p') =~ /^fws_/) ) { $showMePlease =1 }
 
 	#
 	# move though the data records creating the individual hashes
@@ -609,6 +611,101 @@ sub dataHash {
         # return the hash or hash reference
         #
         if ($paramHash{'ref'} eq '1') { return \%dataHash } else {return %dataHash }
+}
+
+=head2 deleteData
+
+Delete something from the data table.   %dataHash must contain guid and either containerId or parent. By passing noOrphanDelete with a value of 1, any data ophaned from the act of this delete will also be deleted.
+
+	my %dataHash;
+	$dataHash{'noOrphanDelete'}	= '0';
+	$dataHash{'guid'}		= 'someguid123123123';
+	$dataHash{'parent'}		= 'someparentguid';
+        my %dataHash $fws->deleteData(%dataHash);
+
+=cut
+
+sub deleteData {
+        my ($self, %paramHash) = @_;
+        %paramHash = $self->runScript('preDeleteData',%paramHash);
+
+        #
+        # get the sid if one wasn't passed
+        #
+        if ($paramHash{'siteGUID'} eq '') { $paramHash{'siteGUID'} = $self->{'siteGUID'} }
+
+        #
+        # transform the containerId to the parent id
+        #
+        if ($paramHash{'containerId'} ne '') {
+                ($paramHash{'parent'}) = @{$self->runSQL(SQL=>"select guid from data where name='".$self->safeSQL($paramHash{'containerId'})."' and element_type='data' and site_guid='".$self->safeSQL($paramHash{'siteGUID'})."' LIMIT 1")};
+        }
+
+        #
+        # Kill the xref
+        #
+        $self->_deleteXRef($paramHash{'guid'},$paramHash{'parent'},$paramHash{'siteGUID'});
+
+        #
+        # Kill any data recrods now orphaned from this process
+        #
+	$self->_deleteOrphanedData("guid_xref","child","data","guid");
+	
+	#
+	# if we are cleaning orphans continue
+	#	
+	if ($paramHash{'noOrphanDelete'} ne '1') {
+	        #
+	        # loop though till we don't see anything dissapear
+	        #
+	        my $keepGoing = 1;
+	
+	        while ($keepGoing) {
+			#
+			# set up the tests
+			#
+	                my ($firstTest)         = @{$self->runSQL(SQL=>"select count(1) from guid_xref")};
+	                my ($firstTestData)     = @{$self->runSQL(SQL=>"select count(1) from data")};
+
+	                #
+	                # get rid of any parent that no longer has a perent
+	                #
+	                $self->_deleteOrphanedData('guid_xref','parent','data','guid',' and guid_xref.parent <> \'\'');
+	
+	                #
+	                # get rid of any data records that are now orphaned from the above process's
+	                #
+	                $self->_deleteOrphanedData("data","guid","guid_xref","child");
+	
+			#
+			# if we are not deleting orphans do the checks
+			#
+			if ($paramHash{'noOrphanDelete'} ne '1') {
+	
+	                        #
+	                        # grab a second test to match against
+	                        #
+	                        my ($secondTest)        = @{$self->runSQL(SQL=>"select count(1) from guid_xref")};
+	                        my ($secondTestData)    = @{$self->runSQL(SQL=>"select count(1) from data")};
+	
+	                        #
+	                        # now that we have a first and second pass.  if they have changed keep going, but if nothing happened
+	                        # lets ditch out of here
+	                        #
+	                        if ($secondTest eq $firstTest && $secondTestData eq $firstTestData) { $keepGoing = 0 } else { $keepGoing = 1 }
+	                }
+	        }
+        	#
+	        # Kill any data recrods now orphaned from the cleansing
+	        #
+		$self->_deleteOrphanedData("guid_xref","child","data","guid");
+	}
+
+	#
+	# run any post scripts and return what we were passed
+	#
+        %paramHash = $self->runScript('postDeleteData',%paramHash);
+        return %paramHash;
 }
 
 =head2 fwsGUID
@@ -1019,9 +1116,11 @@ sub saveData {
         if ($paramHash{'layout'} eq '') { $paramHash{'layout'} = 'main' }
 
         #
-        # add the xref record if it needs to
+        # add the xref record if it needs to... BUT!  only pages are aloud to have blank parents, everything else needs a parent
         #
-        $self->_saveXRef($paramHash{'guid'},$paramHash{'layout'},$paramHash{'ord'},$paramHash{'parent'},$paramHash{'site_guid'});
+	if ($paramHash{'type'} eq 'page' || $paramHash{'parent'} ne '') {
+	        $self->_saveXRef($paramHash{'guid'},$paramHash{'layout'},$paramHash{'ord'},$paramHash{'parent'},$paramHash{'site_guid'});
+	}
 
         #
         # now before we added something new we might need a new index, lets reset it for good measure
@@ -1037,7 +1136,7 @@ sub saveData {
         # loop though and update every one that is diffrent
         #
         for my $key ( keys %paramHash ) {
-                if ($key !~ /^(ord|pageIdOfElement|keywordScore|navigationName|showResubscribe|guid_xref_site_guid|groupId|lang|pageFriendlyURL|type|guid|newGUID|name|element_type|active|title|disableTitle|disableEditMode|defaultElement|showLogin|parent|layout|site_guid)$/) {
+                if ($key !~ /^(ord|pageIdOfElement|keywordScore|navigationName|showResubscribe|guid_xref_site_guid|groupId|lang|pageFriendlyURL|type|guid|siteGUID|newGUID|name|element_type|active|title|disableTitle|disableEditMode|defaultElement|showLogin|parent|layout|site_guid)$/) {
                         $self->saveExtra(table=>'data',siteGUID=>$paramHash{'site_guid'},guid=>$paramHash{'guid'},field=>$key,value=>$paramHash{$key});
                 }
         }
@@ -1413,6 +1512,7 @@ sub updateDatabase {
         my ($self) = @_;
         my $db = "";
 
+
 	#
 	# build an array that we will process field by field
 	#
@@ -1737,10 +1837,10 @@ sub updateDatabase {
                 "element","active"                      ,"int(1)"       ,""             ,"0",
                 "element","checkedout"                  ,"int(1)"       ,""             ,"0",
                 "element","root_element"                ,"int(1)"       ,""             ,"0",
-                "element","script_devel"                ,"text"         ,""             ,"",
-                "element","script_live"                 ,"text"         ,""             ,"",
-                "element","schema_devel"                ,"text"         ,""             ,"",
-                "element","schema_live"                 ,"text"         ,""             ,"",
+                "element","script_devel"                ,$self->{'scriptTextSize'},""   ,"",
+                "element","script_live"                 ,$self->{'scriptTextSize'},""   ,"",
+                "element","schema_devel"                ,'text',	""   		,"",
+                "element","schema_live"                 ,'text',	""   		,"",
 
                 "groups","site_guid"                    ,"char(36)"     ,"MUL"          ,"",
                 "groups","guid"                         ,"char(36)"     ,"MUL"          ,"",
@@ -1897,8 +1997,46 @@ sub updateModifiedDate {
 }
 
 
+############################################################################################
+# DATA: Delete a orphened data
+############################################################################################
 
+sub _deleteOrphanedData {
+        my ($self,$table,$field,$refTable,$refField,$extraWhere) = @_;
 
+        #
+        # get the vars set for pre-processing
+        #
+        my $keepDeleting = 1;
+
+        #
+        # keep looping till either we are endless or
+        #
+        while ($keepDeleting) {
+
+		#
+		# create the SQL that will be used for the delete and the reflective query
+		#
+                my $fromSQL = "from ".$table." where ".$table.".".$field." in (select ".$field." from (select distinct ".$table.".".$field." from ".$table." left join ".$refTable." on ".$refTable.".".$refField." = ".$table.".".$field." where ".$refTable.".".$refField." is null ".$extraWhere.") as delete_list)";
+
+		#
+		# do the actual delete
+		#
+                $self->runSQL(SQL=>"delete ".$fromSQL);
+
+		#
+		# if we are talking about the data field, lets do the same thing to the data cache table
+		#
+                if ($table eq 'data') {
+                        $self->runSQL(SQL=>"delete from ".$table."_cache where ".$table."_cache.".$field." in (select ".$field." from (select distinct ".$table."_cache.".$field." from ".$table."_cache left join ".$refTable." on ".$refTable.".".$refField." = ".$table."_cache.".$field." where ".$refTable.".".$refField." is null ".$extraWhere.") as delete_list)");
+                }
+
+		#
+		# run the same fromSQL and see if anything is left
+		#
+                ($keepDeleting) = @{$self->runSQL(SQL=>"select 1 ".$fromSQL)};
+        }
+}
 
 ############################################################################################
 # DATA: Delete a guid XRef

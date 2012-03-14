@@ -9,11 +9,11 @@ FWS::V2 - Framework Sites Version 2
 
 =head1 VERSION
 
-Version 0.004
+Version 0.005
 
 =cut
 
-our $VERSION = '0.004';
+our $VERSION = '0.005';
 
 
 =head1 SYNOPSIS
@@ -102,13 +102,17 @@ Non-required parameters for FWS installations can be added, but depending on the
 
 =over 4
 
-=item * affiliateExpMax
+=item * adminPassword
 
-The number of seconds an affiliate code will stay active after it has been received.  Default: 295200
+For new installations this is the admin password until the first super admin account is created.  After an admin account is created this password is disabled.
 
 =item * adminURL
 
 The url defined to get to the typical /admin log in screen.  Default: 'admin'
+
+=item * affiliateExpMax
+
+The number of seconds an affiliate code will stay active after it has been received.  Default: 295200
 
 =item * cookieDomainName
 
@@ -137,6 +141,14 @@ Full path name of non web accessible files. Example: /home/user/secureFiles
 =item * fileWebPath
 
 Web path for the same place filePath points to.  Example: /files
+
+=item * googleAppsKeyFile
+
+For google apps support for standard login modules this is required
+
+=item * scriptTextSize
+
+If your element scripts are larger than 'text' and get truncated you might want to set this to 'mediumtext'
 
 =item * secureDomain
 
@@ -196,6 +208,10 @@ The guid of the home page.  The formValue 'p' will be set to this if no 'p' valu
 
 The guid of the site currently being rendered
 
+=item * sessionCookieName
+
+If there could be conflict with the cookie name, you can change the name of the cookie from its default of fws_session to something else.
+
 =item * siteName
 
 The site name of the site currently being rendered
@@ -242,7 +258,7 @@ The time in epoch that the affiliate code will expire for the current session
 # consistancy between the two versions everything is inherited, always.
 #
 # ELSE CUDDLING
-# Use non cuddled elses.  
+# Use non cuddled elses unless its all on the same line with the if. 
 #
 # CONDITIONALS PERFER 'ne' 'eq'
 # All conditionals that can be, are treated like strings and in very 
@@ -353,7 +369,7 @@ sub new {
 	#
 
 	#
-	# TODO rewrite this section to reverse defaults and overload passed paramaters.  Would be slightly more efficient 
+	# TODO rewrite this section to reverse defaults and overload passed parameter.  Would be slightly more efficient 
 	#
 
 	#
@@ -365,7 +381,16 @@ sub new {
 	# set the secure domain to a non https because it probably does not have a cert if it was not set 
 	#
         if ($self->{'secureDomain'} eq '')      { $self->{'secureDomain'} = 'http://'.$ENV{"SERVER_NAME"} }
+
+	#
+	# Sometimes sites need bigger thatn text blob, 'mediumtext' might be needed
+	#
+        if ($self->{'scriptTextSize'} eq '')    { $self->{'scriptTextSize'} = 'text' }
 	
+	#
+	# set the domains to the environment version if it was not set
+	#
+        if ($self->{'sessionCookieName'} eq '')  { $self->{'sessionCookieName'} = 'fws_session' }
 	#
 	# set the domains to the environment version if it was not set
 	#
@@ -390,7 +415,11 @@ sub new {
 	# set the default SQL log level
 	#
 	if ($self->{"SQLLogLevel"} eq '') 	{ $self->{"SQLLogLevel"} = 0 }
-
+	
+	#
+	# set the default location for sendmail
+	#
+	if ($self->{"sendmailBin"} eq '') 	{ $self->{"sendmailBin"} = '/usr/sbin/sendmail' }
 
 	#
 	# prepopulate a few things that might be needed so they are not undefined
@@ -402,6 +431,7 @@ sub new {
 	%{$self->{'_fullElementHashCache'}}	= ();
 	%{$self->{'_tableFieldHashCache'}}	= ();
 	%{$self->{'_siteScriptCache'}}		= ();
+	%{$self->{'_subscriberCache'}}		= ();
 
 	$self->{'_language'}			= '';
 	$self->{'_languageArray'}		= '';
@@ -411,6 +441,18 @@ sub new {
 	# but in case we need a ph before then
 	#
 	%{$self->{'dataCacheFields'}}		= ();
+
+	#
+	# this will store the currently logged in userHash
+	#
+	%{$self->{'profileHash'}}		= ();
+
+	
+	#
+	# set this to false, it might be turned on at any time by admin or elements
+	#
+	$self->{'tinyMCEEnable'}          	= 0;
+
 	
 	#
 	# add self

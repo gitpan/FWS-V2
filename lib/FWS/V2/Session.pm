@@ -9,11 +9,11 @@ FWS::V2::Session - Framework Sites version 2 session related methods
 
 =head1 VERSION
 
-Version 0.002
+Version 0.003
 
 =cut
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 
 =head1 SYNOPSIS
@@ -94,8 +94,7 @@ sub getFormValues {
         #
         # grab the one from the cookie if we have it
         #
-        my $cookieSession = $cgi->cookie('fws_session');
-        my $fullMode = chop($cookieSession);
+        my $cookieSession = $cgi->cookie($self->{'sessionCookieName'});
 
         if ($cookieSession ne '' && $self->{"form"}{"session"} eq '') {
                 $self->{"form"}{"session"} = $cookieSession;
@@ -109,29 +108,6 @@ sub getFormValues {
         }
         $self->language(uc($self->{"form"}{"fws_lang"}));
 }
-
-
-=head2 isAdminLoggedIn
-
-Return a 0 or 1 depending if a admin user is currently logged in.
-
-=cut 
-
-sub isAdminLoggedIn {
-        my ($self,$loginType) = @_;
-        if ($self->{'adminLoginId'} ne '') { return (1) } else { return (0) }
-        }
-
-=head2 isUserLoggedIn
-
-Return a 0 or 1 depending if a site user is currently logged in.
-
-=cut
-
-sub isUserLoggedIn {
-        my ($self,$loginType) = @_;
-        if ($self->{'userLoginId'} eq '') { return (0) } else { return (1) }
-        }
 
 =head2 language
 
@@ -251,7 +227,7 @@ sub setSiteValues {
         	#
         	# make the actual page
         	#
-       		$self->saveData(type=>'home',parent=>$self->{'siteGUID'},newGUID=>$homeGUID);
+       		$self->saveData(type=>'page',parent=>$self->{'siteGUID'},newGUID=>$homeGUID);
 		}
 
         #

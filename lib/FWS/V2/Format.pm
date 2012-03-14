@@ -5,7 +5,7 @@ use strict;
 
 =head1 NAME
 
-FWS::V2::Format - Framework Sites version 2 text and html formatting methods
+FWS::V2::Format - Framework Sites version 2 text and html formatting
 
 =head1 VERSION
 
@@ -115,31 +115,83 @@ By passing monthMod you can adjust the month forward or backwards by the given n
 	#
 	my $threeMonths = $fws->dateTime(format=>'date',monthMod=>3);
 
+Possible Parameters:
+
+=over 4
+
+=item * format
+
+Format type to return.  This is the only required field
+
+=item * epochTime
+
+epoch time which could be created with time()
+
+=item * monthMod
+
+modify the current month ahead or behind.  (Note: If your current day is 31st, and you mod to a month that has less than 31 days it will move to the highest day of that month)
+
+=item * dateSeperator
+
+This will default to '-', but can be changed to anything.   (Note: Do not use this if you are returing SQLTime format)
+
+=item * GMTOffset
+
+Time zone modifier.  Example: EST would be -5
+
+=item * SQLTime
+
+Use an SQL time format as the incomming date and time.
+
+=back
+
 The following types of formats are valid:
 
 =over 4
 
-=item * date : mm-dd-yyyy
+=item * date
 
-=item * time : hh:mmAM XXX
+mm-dd-yyyy
 
-=item * fancyDate : weekdayName, monthName dd[st|nd|rd] of yyyy
+=item * time
 
-=item * cookie : cookie compatible date/time
+hh:mmAM XXX
 
-=item * apache : apache web server compatible date/time
+=item * fancyDate
 
-=item * number : yyyymmddhhmmss
+weekdayName, monthName dd[st|nd|rd] of yyyy
 
-=item * dateTime : mm-dd-yyyy hh:mmAM XXX
+=item * cookie
 
-=item * dateTimeFull : mm-dd-yyyy hh:mm:ss XXX
+cookie compatible date/time
 
-=item * SQL : yyyy-mm-dd hh:mm:ss
+=item * apache
 
-=item * epoch : Standard epoch number
+apache web server compatible date/time
 
-=item * yearFirstDate : yyyy-mm-dd
+=item * number
+
+yyyymmddhhmmss
+
+=item * dateTime
+
+mm-dd-yyyy hh:mmAM XXX
+
+=item * dateTimeFull
+
+mm-dd-yyyy hh:mm:ss XXX
+
+=item * SQL
+
+yyyy-mm-dd hh:mm:ss
+
+=item * epoch
+
+Standard epoch number
+
+=item * yearFirstDate
+
+yyyy-mm-dd
 
 =back
 
@@ -147,13 +199,18 @@ The following types of formats are valid:
 
 sub dateTime {
         my ($self,%paramHash) = @_;
-        my $format      = $paramHash{'format'};
-        my $monthMod    = $paramHash{'monthMod'};
-        my $POSIXTime   = $paramHash{'POSIXTime'};
-        my $epochTime   = $paramHash{'epochTime'};
-        my $GMTOffset   = $paramHash{'GMTOffset'};
-        my $SQLTime     = $paramHash{'SQLTime'};
+        my $format     		= $paramHash{'format'};
+        my $monthMod    	= $paramHash{'monthMod'};
+        my $POSIXTime   	= $paramHash{'POSIXTime'};
+        my $epochTime   	= $paramHash{'epochTime'};
+        my $GMTOffset   	= $paramHash{'GMTOffset'};
+        my $SQLTime     	= $paramHash{'SQLTime'};
+        my $dateSeparator 	= $paramHash{'dateSeparator'};
 
+	#
+	# default the separator to a dash
+	#
+	if ($dateSeparator eq '') { $dateSeparator = '-' };
 
         if ($SQLTime ne '') {
                 my @timeSplit = split(/[ \-:]/,$SQLTime);
@@ -257,7 +314,7 @@ sub dateTime {
         if ($format =~ /^cookie$/i) {
                 my @dayName = qw(Sun Mon Tue Wed Thu Fri Sat);
                 my @monthName = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
-                $showDateTime = $dayName[$wday].", ".$monthDay."-".$monthName[$mon-1]."-".$year." ".$hour.":".$minute.":".$sec." GMT";
+                $showDateTime = $dayName[$wday].", ".$monthDay.$dateSeparator.$monthName[$mon-1].$dateSeparator.$year." ".$hour.":".$minute.":".$sec." GMT";
         }
 
 
@@ -282,11 +339,11 @@ sub dateTime {
         }
 
         if ($format =~ /^odbc$/i|| $format =~ /SQL/i) {
-                $showDateTime = $year."-".$month."-".$monthDay." ".$hour.":".$minute.":".$sec;
+                $showDateTime = $year.$dateSeparator.$month.$dateSeparator.$monthDay." ".$hour.":".$minute.":".$sec;
         }
 
         if ($format =~ /^date$/i) {
-                $showDateTime = $month."-".$monthDay."-".$year;
+                $showDateTime = $month.$dateSeparator.$monthDay.$dateSeparator.$year;
         }
 
         if ($format =~ /^time$/i) {
@@ -294,19 +351,19 @@ sub dateTime {
         }
 
         if ($format =~ /^dateTime$/i) {
-                $showDateTime = $month."-".$monthDay."-".$year." ".$hr.":".$min." EST";
+                $showDateTime = $month.$dateSeparator.$monthDay.$dateSeparator.$year." ".$hr.":".$min." EST";
         }
 
         if ($format =~ /^dateTimeFull$/i) {
-                $showDateTime = $month."-".$monthDay."-".$year." ".$hour.":".$minute.":".$sec." EST";
+                $showDateTime = $month.$dateSeparator.$monthDay.$dateSeparator.$year." ".$hour.":".$minute.":".$sec." EST";
         }
 
         if ($format =~ /^yearFirstDate$/i) {
-                $showDateTime = $year."-".$month."-".$monthDay;
+                $showDateTime = $year.$dateSeparator.$month.$dateSeparator.$monthDay;
         }
 
         if ($format =~ /^firstOfMonth$/i) {
-                $showDateTime = $month."-01-".$year;
+                $showDateTime = $month.$dateSeparator."01".$dateSeparator.$year;
         }
 
         if ($format =~ /^epoch$/i) {
@@ -316,9 +373,30 @@ sub dateTime {
         return $showDateTime;
 }
 
+=head2 justFileName
 
+Return just the file name when given a full file path
 
+        my $fileName = $fws->justFileName('/this/is/not/going/to/be/here/justTheFileName.jpg');
 
+=cut
+
+sub justFileName {
+        my ($self, $justFileName) = @_;
+
+        #
+        # change the \ to /'s
+        #
+        $justFileName =~ s/\\/\//g;
+
+	#
+	# split it up and pop off the last one
+	#
+        my @fileNameArray = split(/\//,$justFileName);
+        $justFileName = pop(@fileNameArray);
+
+        return $justFileName
+        }
 
 =head2 jqueryEnable
 

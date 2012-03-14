@@ -10,11 +10,11 @@ FWS::V2::Check - Framework Sites version 2 validation and checking methods
 
 =head1 VERSION
 
-Version 0.001
+Version 0.002
 
 =cut
 
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 
 
 =head1 SYNOPSIS
@@ -41,6 +41,39 @@ Simple methods that will return boolean results based on the validation of the p
 
 
 =head1 METHODS
+
+=head2 isAdminLoggedIn
+
+Return a 0 or 1 depending if a admin user is currently logged in.
+
+
+        #
+        # do something if logged in as an admin user
+        #
+        if ($fws->isAdminLoggedIn()) { $valueHash{'html'} .= 'I am logged in as a admin<br/>' }
+
+=cut
+
+sub isAdminLoggedIn {
+        my ($self,$loginType) = @_;
+        if ($self->{'adminLoginId'} ne '') { return (1) } else { return (0) }
+        }
+
+=head2 isUserLoggedIn
+
+Return a 0 or 1 depending if a site user is currently logged in.
+
+        #
+        # do something if logged in as an site user
+        #
+        if ($fws->isUserLoggedIn()) { $valueHash{'html'} .= 'I am logged in as a user<br/>' }
+
+=cut
+
+sub isUserLoggedIn {
+        my ($self,$loginType) = @_;
+        if ($self->{'userLoginId'} eq '') { return (0) } else { return (1) }
+        }
 
 =head2 isValidEmail
 

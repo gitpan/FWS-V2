@@ -22,7 +22,8 @@ requires:
   Crypt::Blowfish: 0
   DBI: 0
   Digest::SHA1: 0
+  GD: 0
   Storable: 0
   Test::More: 0
   Time::Local: 0
-version: 0.004
+version: 0.005
