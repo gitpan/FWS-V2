@@ -9,11 +9,11 @@ FWS::V2 - Framework Sites Version 2
 
 =head1 VERSION
 
-Version 0.005
+Version 0.006
 
 =cut
 
-our $VERSION = '0.005';
+our $VERSION = '0.006';
 
 
 =head1 SYNOPSIS

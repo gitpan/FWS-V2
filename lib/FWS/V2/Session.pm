@@ -9,11 +9,11 @@ FWS::V2::Session - Framework Sites version 2 session related methods
 
 =head1 VERSION
 
-Version 0.003
+Version 0.004
 
 =cut
 
-our $VERSION = '0.003';
+our $VERSION = '0.004';
 
 
 =head1 SYNOPSIS
@@ -227,7 +227,9 @@ sub setSiteValues {
         	#
         	# make the actual page
         	#
-       		$self->saveData(type=>'page',parent=>$self->{'siteGUID'},newGUID=>$homeGUID);
+		# there isn't actually a type home, this is the flag that allows you to make a xref that does not have  a parent it will be flipped to 'page 
+		#
+       		$self->saveData(type=>'home',parent=>'',newGUID=>$homeGUID);
 		}
 
         #

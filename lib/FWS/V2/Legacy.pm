@@ -9,11 +9,11 @@ FWS::V2::Legacy - Framework Sites version 2 compatibility and legacy methods and
 
 =head1 VERSION
 
-Version 0.002
+Version 0.003
 
 =cut
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 
 =head1 SYNOPSIS
@@ -355,6 +355,18 @@ sub initActions {
         return '';
 }
 
+
+=head2 openRS
+
+Depricated, use runSQL instead.
+
+=cut
+
+sub openRS {
+        my ($self,$SQL) = @_;
+        return @{$self->runSQL(SQL=>$SQL)};
+}
+
 =head2 postHTTP
 
 Depricated, use HTTPRequest instead.
@@ -367,6 +379,18 @@ sub postHTTP {
         if ($res->{'success'} eq '1') { return ($res->{'content'},1) }
         else { return ($res->{'status'},0) }
 }
+
+=head2 resizeImage
+
+Depricated, use saveImage instead.
+
+=cut
+
+sub resizeImage {
+        my ($self,$origFile,$newFile,$newWidth,$newHeight) = @_;
+        return $self->saveImage(sourceFile=>$origFile,fileName=>$newFile,width=>$newWidth,height=>$newHeight);
+}
+
 
 =head2 scriptName
 

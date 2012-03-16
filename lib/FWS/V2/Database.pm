@@ -4,7 +4,7 @@ use 5.006;
 use strict;
 
 =head1 NAME
-pulation
+
 FWS::V2::Database - Framework Sites version 2 data management
 
 =head1 VERSION
@@ -708,6 +708,49 @@ sub deleteData {
         return %paramHash;
 }
 
+=head2 flushSearchCache
+
+Delete all cached data and rebuild it from scratch.  Will return the number of records it optimized.  If no siteGUID was passed then the one from the current site being rendered is used
+
+        print $fws->flushSearchCache($fws->{'siteGUID'});
+
+=cut
+
+sub flushSearchCache {
+        my ($self,$siteGUID) = @_;
+
+	#
+	# set the site guid if it wasn't passed
+	#
+        if ($siteGUID eq '') { $siteGUID = $self->{'siteGUID'} }
+
+        #
+        # before we do anything lets get the cache fields reset
+        #
+        $self->setCacheIndex();
+
+        #
+        # drop the current data
+        #
+        $self->runSQL(SQL=>"delete from data_cache where site_guid='".$self->safeSQL($siteGUID)."'");
+
+        #
+        # have a counter so we can see how much work we did
+        #
+        my $dataUnits = 0;
+
+        #
+        # get a list of the current data, and update the cache for each one
+        #
+        my $dataArray = $self->runSQL(SQL=>"select guid from data where site_guid='".$self->safeSQL($siteGUID)."'");
+        while (@$dataArray) {
+                my $guid = shift(@$dataArray);
+                $self->updateDataCache($self->dataHash(guid=>$guid));
+                $dataUnits++;
+        }
+        return $dataUnits;
+}
+
 =head2 fwsGUID
 
 Retrieve the GUID for the fws site. If it does not yet exist, make a new one.
@@ -1118,10 +1161,15 @@ sub saveData {
         #
         # add the xref record if it needs to... BUT!  only pages are aloud to have blank parents, everything else needs a parent
         #
-	if ($paramHash{'type'} eq 'page' || $paramHash{'parent'} ne '') {
+	if ($paramHash{'type'} eq 'home' || $paramHash{'parent'} ne '') {
 	        $self->_saveXRef($paramHash{'guid'},$paramHash{'layout'},$paramHash{'ord'},$paramHash{'parent'},$paramHash{'site_guid'});
 	}
 
+	#
+	# if we are talking about a home page, then we actually need to set this as "page"
+	#
+	if ($paramHash{'type'} eq 'home') { $paramHash{'type'} ='page' }
+	
         #
         # now before we added something new we might need a new index, lets reset it for good measure
         #
