@@ -9,11 +9,11 @@ FWS::V2::Database - Framework Sites version 2 data management
 
 =head1 VERSION
 
-Version 0.002
+Version 0.003
 
 =cut
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 
 =head1 SYNOPSIS
@@ -81,7 +81,62 @@ sub addExtraHash {
         return %mergedHash;
 }
 
+=head2 adminUserArray
 
+Return an array of the admin users.   The hash array will contain name, userId, and guid.
+
+        #
+        # get a reference to the hash array
+        #
+        my $dataArrayRef = $fws->adminUserArray(ref=>1);
+
+=cut
+
+sub adminUserArray {
+        my ($self,%paramHash) = @_;
+        my @userHashArray;
+
+        #
+        # get the data from the database and push it into the hash array
+        #
+        my $adminUserArray = $self->runSQL(SQL=>"select name,user_id,guid from admin_user");
+        while (@$adminUserArray) {
+                #
+                # assign the data to variables: Perl likes it done this way
+                #
+                my %userHash;
+                $userHash{'name'}              = shift(@$adminUserArray);
+                $userHash{'userId'}            = shift(@$adminUserArray);
+                $userHash{'guid'}              = shift(@$adminUserArray);
+
+                #
+                # push it into the array
+                #
+                push (@userHashArray,{%userHash});
+        }
+        if ($paramHash{'ref'} eq '1') { return \@userHashArray } else {return @userHashArray }
+}
+
+
+=head2 adminUserHash
+
+Return an array of the admin users.   The hash array will contain name, userId, and guid.
+
+        #
+        # get a reference to the hash
+        #
+        my $dataHashRef = $fws->adminUserHash(guid=>'someGUIDOfAnAdminUser',ref=>1);
+
+=cut
+
+sub adminUserHash {
+        my ($self,%paramHash) = @_;
+        my $extArray            = $self->runSQL(SQL=>"select extra_value,'email',email,'userId',user_id,'name',name from admin_user where guid='".$self->safeSQL($paramHash{'guid'})."'");
+        my $extraValue          = shift(@$extArray);
+        my %adminUserHash       = @$extArray;
+        %adminUserHash          = $self->addExtraHash($extraValue,%adminUserHash);
+        if ($paramHash{'ref'} eq '1') { return \%adminUserHash } else {return %adminUserHash }
+}
 
 =head2 alterTable
 
@@ -228,7 +283,7 @@ sub alterTable {
         #
         # set any keys if not the same;
         #
-	$self->FWSLog($paramHash{'table'}."_".$paramHash{'field'}." ". $tableFieldHash{$paramHash{'table'}."_".$paramHash{'field'}}{"key"}  );
+	#$self->FWSLog($paramHash{'table'}."_".$paramHash{'field'}." ". $tableFieldHash{$paramHash{'table'}."_".$paramHash{'field'}}{"key"}  );
         if ($tableFieldHash{$paramHash{'table'}."_".$paramHash{'field'}}{"key"} ne "MUL" && $paramHash{'key'} ne "") {
                 $self->runSQL(SQL=>$indexStatement);
                 $sqlReturn .=  $indexStatement."; ";
@@ -236,6 +291,7 @@ sub alterTable {
 
         return $sqlReturn;
 }
+
 
 
 =head2 connectDBH
@@ -478,7 +534,7 @@ sub dataArray {
                 }
 
         my @hashArray;
-        my $recordData = $self->runSQL(SQL=>"select distinct ".$keywordScoreSQL.",".$dataCacheSQL.",data.extra_value,data.guid,data.created_date,data.lang,guid_xref.site_guid,data.site_guid,data.active,data.friendly_url,data.title,data.disable_title,data.default_element,data.disable_edit_mode,data.element_type,data.nav_name,data.name,guid_xref.parent,guid_xref.layout from guid_xref ".$dataCacheJoin."  left join data on (guid_xref.site_guid='".$self->safeSQL($paramHash{'siteGUID'})."') and ".$dataConnector." ".$addToDataXRefJoin." ".$addToExtJoin."   left join element on (element.guid = data.element_type or data.element_type = element.type) where guid_xref.parent != '' and guid_xref.site_guid is not null ".$addToDataWhere." order by guid_xref.ord");
+        my $arrayRef = $self->runSQL(SQL=>"select distinct ".$keywordScoreSQL.",".$dataCacheSQL.",data.extra_value,data.guid,data.created_date,data.lang,guid_xref.site_guid,data.site_guid,data.site_guid,data.active,data.friendly_url,data.title,data.disable_title,data.default_element,data.disable_edit_mode,data.element_type,data.nav_name,data.name,guid_xref.parent,guid_xref.layout from guid_xref ".$dataCacheJoin."  left join data on (guid_xref.site_guid='".$self->safeSQL($paramHash{'siteGUID'})."') and ".$dataConnector." ".$addToDataXRefJoin." ".$addToExtJoin." left join element on (element.guid = data.element_type or data.element_type = element.type) where guid_xref.parent != '' and guid_xref.site_guid is not null ".$addToDataWhere." order by guid_xref.ord");
 
 
         #
@@ -490,32 +546,33 @@ sub dataArray {
 	#
 	# move though the data records creating the individual hashes
 	#
-        while (@{$recordData}) {
+        while (@{$arrayRef}) {
                 my %dataHash;
 
-                my $keywordScore                = shift(@{$recordData});
-                my $pageIdOfElement             = shift(@{$recordData});
+                my $keywordScore                = shift(@{$arrayRef});
+                my $pageIdOfElement             = shift(@{$arrayRef});
 
-                my $extraValue                  = shift(@{$recordData});
+                my $extraValue                  = shift(@{$arrayRef});
 
-                $dataHash{'guid'}               = shift(@{$recordData});
-                $dataHash{'createdDate'}        = shift(@{$recordData});
-                $dataHash{'lang'}               = shift(@{$recordData});
-                $dataHash{'guid_xref_site_guid'}= shift(@{$recordData});
-                $dataHash{'site_guid'}          = shift(@{$recordData});
-                $dataHash{'active'}             = shift(@{$recordData});
-                $dataHash{'pageFriendlyURL'}    = shift(@{$recordData});
-                $dataHash{'title'}              = shift(@{$recordData});
-                $dataHash{'disableTitle'}       = shift(@{$recordData});
-                $dataHash{'defaultElement'}     = shift(@{$recordData});
-                $dataHash{'disableEditMode'}    = shift(@{$recordData});
-                $dataHash{'type'}               = shift(@{$recordData});
-                $dataHash{'navigationName'}     = shift(@{$recordData});
-                $dataHash{'name'}               = shift(@{$recordData});
-                $dataHash{'parent'}             = shift(@{$recordData});
-                $dataHash{'layout'}             = shift(@{$recordData});
+                $dataHash{'guid'}               = shift(@{$arrayRef});
+                $dataHash{'createdDate'}        = shift(@{$arrayRef});
+                $dataHash{'lang'}               = shift(@{$arrayRef});
+                $dataHash{'guid_xref_site_guid'}= shift(@{$arrayRef});
+                $dataHash{'siteGUID'}           = shift(@{$arrayRef});
+                $dataHash{'site_guid'}          = shift(@{$arrayRef});
+                $dataHash{'active'}             = shift(@{$arrayRef});
+                $dataHash{'pageFriendlyURL'}    = shift(@{$arrayRef});
+                $dataHash{'title'}              = shift(@{$arrayRef});
+                $dataHash{'disableTitle'}       = shift(@{$arrayRef});
+                $dataHash{'defaultElement'}     = shift(@{$arrayRef});
+                $dataHash{'disableEditMode'}    = shift(@{$arrayRef});
+                $dataHash{'type'}               = shift(@{$arrayRef});
+                $dataHash{'navigationName'}     = shift(@{$arrayRef});
+                $dataHash{'name'}               = shift(@{$arrayRef});
+                $dataHash{'parent'}             = shift(@{$arrayRef});
+                $dataHash{'layout'}             = shift(@{$arrayRef});
 
-                if ($dataHash{'active'} || ($showMePlease && $dataHash{'site_guid'} eq $paramHash{'siteGUID'}) || ($paramHash{'siteGUID'} ne $dataHash{'site_guid'} && $dataHash{'active'})) {
+                if ($dataHash{'active'} || ($showMePlease && $dataHash{'siteGUID'} eq $paramHash{'siteGUID'}) || ($paramHash{'siteGUID'} ne $dataHash{'siteGUID'} && $dataHash{'active'})) {
 
                         #
                         # twist our legacy statements around.  titleOrig isn't legacy - but I don't
@@ -578,18 +635,18 @@ sub dataHash {
         if ($paramHash{'siteGUID'} eq '') {$paramHash{'siteGUID'} = $self->{'siteGUID'} }
 
 
-        my $recordData =  $self->runSQL(SQL=>"select data.extra_value,data.element_type,'lang',lang,'guid',data.guid,'pageFriendlyURL',friendly_url,'defaultElement',data.default_element,'guid_xref_site_guid',data.site_guid,'showLogin',data.show_login,'showResubscribe',data.show_resubscribe,'groupId',data.groups_guid,'disableEditMode',data.disable_edit_mode,'site_guid',data.site_guid,'title',data.title,'disableTitle',data.disable_title,'active',data.active,'navigationName',nav_name,'name',data.name from data left join site on site.guid=data.site_guid where data.guid='".$self->safeSQL($paramHash{'guid'})."' and (data.site_guid='".$self->safeSQL($paramHash{'siteGUID'})."' or site.sid='fws')");
+        my $arrayRef =  $self->runSQL(SQL=>"select data.extra_value,data.element_type,'lang',lang,'guid',data.guid,'pageFriendlyURL',friendly_url,'defaultElement',data.default_element,'guid_xref_site_guid',data.site_guid,'showLogin',data.show_login,'showResubscribe',data.show_resubscribe,'groupId',data.groups_guid,'disableEditMode',data.disable_edit_mode,'siteGUID',data.site_guid,'site_guid',data.site_guid,'title',data.title,'disableTitle',data.disable_title,'active',data.active,'navigationName',nav_name,'name',data.name from data left join site on site.guid=data.site_guid where data.guid='".$self->safeSQL($paramHash{'guid'})."' and (data.site_guid='".$self->safeSQL($paramHash{'siteGUID'})."' or site.sid='fws')");
 
         #
         # pull off the first two fields because we need to manipulate them
         #
-        my $extraValue  = shift(@$recordData);
-        my $dataType    = shift(@$recordData);
+        my $extraValue  = shift(@$arrayRef);
+        my $dataType    = shift(@$arrayRef);
 
         #
         # convert it to a hash
         #
-        my %dataHash                    = @$recordData;
+        my %dataHash                    = @$arrayRef;
 
         #
         # do some legacy data type switching around.  some call it type (wich it should be, and some call it element_type
@@ -708,6 +765,85 @@ sub deleteData {
         return %paramHash;
 }
 
+=head2 deleteQueue
+
+Delete from the message and process queue
+
+        my %queueHash;
+        $queueHash{'guid'}               = 'someQueueGUID';
+        my %queueHash $fws->deleteData(%queueHash);
+
+=cut
+
+sub deleteQueue {
+        my ($self,%paramHash) = @_;
+        %paramHash = $self->runScript('preDeleteQueue',%paramHash);
+        $self->runSQL(SQL=>"delete from queue where guid = '".$self->safeSQL($paramHash{'guid'})."'");
+        %paramHash = $self->runScript('postDeleteQueue',%paramHash);
+        return %paramHash;
+}
+
+
+
+=head2 exportCSV
+
+Return a hash array in a csv format.
+
+        my $csv = $fws->exportCSV(dataArray=>[@someArray]);
+
+=cut
+
+sub exportCSV {
+        my ($self,%paramHash) = @_;
+
+        #
+        # pull the array out of the hash and find out the keys
+        #
+        my @dataArray = @{$paramHash{'dataArray'}};
+        my %theKeys;
+        for my $i (0 .. $#dataArray) {
+                for my $key ( keys %{$dataArray[$i]}) {
+                        if ($key =~ /^(guid|killSession)$/) {
+                                $theKeys{$key} =1;
+                        }
+                }
+        }
+
+        #
+        # create the header
+        #
+        my $returnString = 'guid,';
+        for my $key ( sort keys %theKeys) { $returnString .= $key.',' }
+        $returnString .= "\n";
+
+        #
+        # create the list for everything else
+        #
+        for my $i (0 .. $#dataArray) {
+                $returnString .= $dataArray[$i]{'guid'}.',';
+
+                #
+                # kill anything that is a blank date and aggressivly clean up anything
+                # could break a csv
+                #
+                for my $key ( sort keys %theKeys) {
+                        $dataArray[$i]{$key} =~ s/(,|;)/ /sg;
+                        $dataArray[$i]{$key} =~ s/(\n|\r)//sg;
+                        $dataArray[$i]{$key} =~ s/^(0000.00.00.*|'|")//sg;
+                        $returnString .= $dataArray[$i]{$key}.',';
+                }
+                $returnString .= "\n";
+        }
+
+        #
+        # kill the trailing comma and return the string
+        #
+        $returnString =~ s/,$//sg;
+        return $returnString. "\n";;
+}
+
+
+
 =head2 flushSearchCache
 
 Delete all cached data and rebuild it from scratch.  Will return the number of records it optimized.  If no siteGUID was passed then the one from the current site being rendered is used
@@ -795,6 +931,23 @@ sub fwsGUID {
 }
 
 
+
+
+=head2 gatewayPassword
+
+Retrieve the payment gateway password
+
+        my $gatewayPass =  $fws->gatewayPassword();
+
+=cut
+
+sub gatewayPassword {
+        my ( $self ) = @_;
+        my ($gateway_password) = @{$self->runSQL(SQL=>"select gateway_password from site where guid='".$self->safeSQL($self->{'siteGUID'})."'")};
+        return $self->FWSDecrypt($gateway_password);
+}
+
+
 =head2 getSiteGUID
 
 Get the site GUID for a site by passing the SID of that site.  If the SID does not exist it will return an empty string.
@@ -864,7 +1017,236 @@ sub getPageGUID {
         return $recId;
 }
 
+=head2 newDBCheck
 
+Do a new database check and then create the base records for a new install of FWS if the database doesn't have an admin record.  The return is the HTML that would render for a browser to let them know what just happened.
+
+=cut
+
+sub newDBCheck {
+        my ($self) = @_;
+        my ($isADMIN) = @{$self->runSQL(SQL=>"select 1 from site where sid='admin'")};
+
+        if ($isADMIN ne '1') {
+                my $fwsGUID     = $self->createGUID('f');
+                my $adminGUID   = $self->createGUID('s');
+                my $siteGUID    = $self->createGUID('s');
+                $self->runSQL(SQL=>"insert into site (guid,sid,site_guid) values ('".$fwsGUID."','fws','".$adminGUID."')");
+                $self->runSQL(SQL=>"insert into site (guid,sid,site_guid) values ('".$adminGUID."','admin','".$adminGUID."')");
+                $self->runSQL(SQL=>"insert into site (guid,sid,default_site,site_guid) values ('".$siteGUID."','site','1','".$adminGUID."')");
+
+                #
+                # create new home page GUID
+                #
+                $self->homeGUID($siteGUID);
+
+                $self->{'stopProcessing'} = 1;
+
+                return "Content-Type: text/html; charset=UTF-8\n\n<html><head><title>New Database Detected</title></head><body><h2>Setting up New Database Users</h2><br/>".
+                        "<b>Admin User Account</b><hr/>".
+                        "User Id: admin<br/>".
+                        "Password: This was set in the ".$self->{'scriptName'}." file<br/>".
+                        "<br/>".
+                        "Note: Once an admin level user is created on this installation, the admin account will be disabled for security reasons. ".
+                        "Please do this before working on your new site for security!".
+                        "<br/><br/>Finished: <a href=\"".$self->{'scriptName'}."\">Click here to continue to</a> -> ".$self->domain().$self->{'scriptName'}.
+                        "</body></html>";
+        }
+}
+
+=head2 queueArray
+
+Return a hash array of the current items in the processing queue.
+
+=cut
+
+sub queueArray {
+        my ($self,%paramHash) = @_;
+
+        #
+        # set PH's for sql statement
+        #
+        my $whereStatement = "1 = 1 ";
+        my $keywordSQL;
+
+        #
+        # Add keywords if they exist to select statement
+        #
+        if ($paramHash{'keywords'} ne '') {
+                $keywordSQL = $self->_getKeywordSQL($paramHash{'keywords'},"guid","queue_from","queue_to","from_name","subject");
+                if ($keywordSQL) { $keywordSQL = " and ( ".$keywordSQL." ) " }
+        }
+
+        #
+        # queuery by directory or user if needed
+        # add other criteria if applicable
+        #
+        if ($paramHash{'directoryGUID'} ne '')  { $whereStatement .= " and directory_guid = '".$self->safeSQL($paramHash{'directoryGUID'})."'" }
+        if ($paramHash{'userGUID'} ne '')       { $whereStatement .= " and profile_guid = '".$self->safeSQL($paramHash{'userGUID'})."'" }
+        if ($paramHash{'from'} ne '')           { $whereStatement .= " and queue_from = '".$self->safeSQL($paramHash{'from'})."'" }
+        if ($paramHash{'to'} ne '')             { $whereStatement .= " and queue_to = '".$self->safeSQL($paramHash{'to'})."'" }
+        if ($paramHash{'fromName'} ne '')       { $whereStatement .= " and from_name = '".$self->safeSQL($paramHash{'fromName'})."'" }
+        if ($paramHash{'subject'} ne '')        { $whereStatement .= " and subject = '".$self->safeSQL($paramHash{'subject'})."'" }
+
+        #
+        # add date critiria if appicable
+        #
+        if ($paramHash{'dateFrom'} eq '')    { $paramHash{'dateFrom'}   = "0000-00-00 00:00:00" }
+        if ($paramHash{'dateTo'} eq '')      { $paramHash{'dateTo'}     = $self->dateTime(format=>'SQL') }
+        $whereStatement .= " and scheduled_date <= '".$self->safeSQL($paramHash{'dateTo'})."'";
+        $whereStatement .= " and scheduled_date >= '".$self->safeSQL($paramHash{'dateFrom'})."'";
+
+        my $arrayRef = $self->runSQL(SQL=>"select profile_guid,directory_guid,guid,type,hash,draft,from_name,queue_from,queue_to,body,subject,digital_assets,transfer_encoding,mime_type,scheduled_date from queue where ".$whereStatement.$keywordSQL." ORDER BY scheduled_date DESC");
+        my @queueArray;
+        while (@$arrayRef) {
+                my %sendHash;
+                $sendHash{'userGUID'}           = shift(@$arrayRef);
+                $sendHash{'directoryGUID'}      = shift(@$arrayRef);
+                $sendHash{'guid'}               = shift(@$arrayRef);
+                $sendHash{'type'}               = shift(@$arrayRef);
+                $sendHash{'hash'}               = shift(@$arrayRef);
+                $sendHash{'draft'}              = shift(@$arrayRef);
+                $sendHash{'fromName'}           = shift(@$arrayRef);
+                $sendHash{'from'}               = shift(@$arrayRef);
+                $sendHash{'to'}                 = shift(@$arrayRef);
+                $sendHash{'body'}               = shift(@$arrayRef);
+                $sendHash{'subject'}            = shift(@$arrayRef);
+                $sendHash{'digitalAssets'}      = shift(@$arrayRef);
+                $sendHash{'transferEncoding'}   = shift(@$arrayRef);
+                $sendHash{'mimeType'}           = shift(@$arrayRef);
+                $sendHash{'scheduledDate'}      = shift(@$arrayRef);
+                push(@queueArray, {%sendHash});
+        }
+        if ($paramHash{'ref'} eq '1') { return \@queueArray } else {return @queueArray }
+}
+
+=head2 queueHash
+
+Return a hash or reference to the a queue hash.
+
+=cut
+
+sub queueHash {
+        my ($self,%paramHash) = @_;
+
+        #
+        # get an array of the all stuff we need,  in a name\value pair format
+        #
+        my $arrayRef = $self->runSQL(SQL=>"select 'directoryGUID',directory_guid,'userGUID',profile_guid,'hash',hash,'guid',guid,'draft',draft,'fromName',from_name,'from',queue_from,'to',queue_to,'body',body,'subject',subject,'digitalAssets',digital_assets,'transferEncoding',transfer_encoding,'mimeType',mime_type,'scheduledDate',scheduled_date from queue where guid='".$self->safeSQL($paramHash{'guid'})."'");
+
+        #
+        # convert the array to a hash
+        #
+        my %itemHash = @$arrayRef;
+
+        if ($paramHash{'ref'} eq '1') { return \%itemHash } else {return %itemHash }
+}
+
+
+=head2 queueHistoryArray
+
+Return a hash array of the history items from the processing queue.
+
+Parmeters to constrain data:
+
+=over 4
+
+=item * limit
+
+Maximum number of records to return.
+
+=item * email
+
+Only items that were sent to or from an email account specified.
+
+=item * synced
+
+Only items that match the sync flaged that is passed.  [0|1]
+
+=item * userGUID
+
+Only items created from this user.
+
+=item * directoryGUID
+
+Only items referencing this directory record.
+
+=back
+
+=cut
+
+sub queueHistoryArray {
+        my ($self,%paramHash) = @_;
+
+        #
+        # set SQL PH's
+        #
+        my $whereStatement = '1=1';
+        my $limitSQL = '';
+
+        #
+        # create sql where and limits
+        #
+        if ($paramHash{'limit'} ne '')          { $limitSQL = ' LIMIT '.$self->safeSQL($paramHash{'limit'}) }
+        if ($paramHash{'email'} ne '')       	{ $whereStatement .= " and (queue_from like '".$self->safeSQL($paramHash{"email"})."' or queue_to like '".$self->safeSQL($paramHash{"email"})."')" }
+        if ($paramHash{'userGUID'} ne '')       { $whereStatement .= " and profile_guid='".$self->safeSQL($paramHash{"userGUID"})."'" }
+        if ($paramHash{'directoryGUID'} ne '')  { $whereStatement .= " and directory_guid='".$self->safeSQL($paramHash{"directoryGUID"})."'" }
+        if ($paramHash{'synced'} ne '')  	{ $whereStatement .= " and synced='".$self->safeSQL($paramHash{"synced"})."'" }
+
+        my @historyArray;
+        my $arrayRef = $self->runSQL(SQL=>"select queue_guid,profile_guid,queue_guid,directory_guid,guid,hash,queue_from,queue_to,type,subject,success,synced,failure_code,response,sent_date,scheduled_date from queue_history where ".$whereStatement." order by sent_date desc".$limitSQL);
+
+        while (@$arrayRef) {
+                my %sendHash;
+                $sendHash{'guidGUID'}           = shift(@$arrayRef);
+                $sendHash{'userGUID'}           = shift(@$arrayRef);
+                $sendHash{'queueGUID'}        	= shift(@$arrayRef);
+                $sendHash{'directoryGUID'}      = shift(@$arrayRef);
+                $sendHash{'guid'}               = shift(@$arrayRef);
+                $sendHash{'hash'}               = shift(@$arrayRef);
+                $sendHash{'from'}               = shift(@$arrayRef);
+                $sendHash{'to'}                 = shift(@$arrayRef);
+                $sendHash{'type'}               = shift(@$arrayRef);
+                $sendHash{'subject'}            = shift(@$arrayRef);
+                $sendHash{'success'}            = shift(@$arrayRef);
+                $sendHash{'synced'}             = shift(@$arrayRef);
+                $sendHash{'failureCode'}        = shift(@$arrayRef);
+                $sendHash{'response'}           = shift(@$arrayRef);
+                $sendHash{'sentDate'}           = shift(@$arrayRef);
+                $sendHash{'scheduledDate'}      = shift(@$arrayRef);
+                push(@historyArray, {%sendHash});
+        }
+        if ($paramHash{'ref'} eq '1') { return \@historyArray } else {return @historyArray }
+}
+
+=head2 queueHistoryHash
+
+Return a hash or reference to the a queue history hash.   History hashes will be referenced by passing a guid key or if present a queueGUID key from the derived queue record it was created from.
+
+=cut;
+
+sub queueHistoryHash {
+        my ($self,%paramHash) = @_;
+
+	#
+	# get the historyHash based on the queueGUID it was dirived from if that what is being used for
+	# if not just treat it like any ole hash lookup
+	#
+	my $whereStatement = "guid='".$self->safeSQL($paramHash{'guid'})."'";
+	if ($paramHash{'queueGUID'} ne '') { $whereStatement = "queue_guid='".$self->safeSQL($paramHash{'queueGUID'})."'" }
+
+        #
+        # get an array of the all stuff we need,  in a name\value pair format
+        #
+        my $arrayRef = $self->runSQL(SQL=>"select 'hash',hash,'guid',guid,'scheduledDate',scheduled_date,'queueGUID',queue_guid,'from',queue_from,'to',queue_to,'failureCode',failure_code,'body',body,'synced',synced,'success',success,'response',response,'subject',subject,'sentDate',sent_date from queue_history where ".$whereStatement);
+
+        #
+        # convert the array
+        #
+        my %itemHash = @$arrayRef;
+
+        if ($paramHash{'ref'} eq '1') { return \%itemHash } else {return %itemHash }
+}
 
 =head2 runSQL
 
@@ -983,9 +1365,6 @@ sub runSQL {
         return \@data;
 }
 
-
-
-
 =head2 saveData
 
 Update or create a new data record.  If guid is not provided then a new record will be created.   If you pass "newGUID" as a parameter for a new record, the new guid will not be auto generated, newGUID will be used.
@@ -1072,9 +1451,9 @@ sub saveData {
         my ($self, %paramHash) = @_;
 
         #
-        # if site_guid is blank, lets set it to the site we are looking at
+        # if siteGUID is blank, lets set it to the site we are looking at
         #
-        if ($paramHash{'site_guid'} eq '') { $paramHash{'site_guid'} = $self->{'siteGUID'} }
+        if ($paramHash{'siteGUID'} eq '') { $paramHash{'siteGUID'} = $self->{'siteGUID'} }
 
         #
         # transform the containerId to the parent id
@@ -1140,13 +1519,13 @@ sub saveData {
                 #
                 # insert the record
                 #
-                $self->runSQL(SQL=>"insert into data (guid,site_guid,created_date) values ('".$self->safeSQL($paramHash{'guid'})."','".$self->safeSQL($paramHash{'site_guid'})."','".$self->dateTime(format=>"SQL")."')");
+                $self->runSQL(SQL=>"insert into data (guid,site_guid,created_date) values ('".$self->safeSQL($paramHash{'guid'})."','".$self->safeSQL($paramHash{'siteGUID'})."','".$self->dateTime(format=>"SQL")."')");
         }
 
         #
         # get the next in the org, so it will be at the end of the list
         #
-        if ($paramHash{'ord'} eq '') { ($paramHash{'ord'}) = @{$self->runSQL(SQL=>"select max(ord)+1 from guid_xref where site_guid='".$self->safeSQL($paramHash{'site_guid'})."' and parent='".$self->safeSQL($paramHash{'parent'})."'")}}
+        if ($paramHash{'ord'} eq '') { ($paramHash{'ord'}) = @{$self->runSQL(SQL=>"select max(ord)+1 from guid_xref where site_guid='".$self->safeSQL($paramHash{'siteGUID'})."' and parent='".$self->safeSQL($paramHash{'parent'})."'")}}
 
         #
         # if we are talking a type of page or home, set layout to 0 because it should not be used
@@ -1162,7 +1541,7 @@ sub saveData {
         # add the xref record if it needs to... BUT!  only pages are aloud to have blank parents, everything else needs a parent
         #
 	if ($paramHash{'type'} eq 'home' || $paramHash{'parent'} ne '') {
-	        $self->_saveXRef($paramHash{'guid'},$paramHash{'layout'},$paramHash{'ord'},$paramHash{'parent'},$paramHash{'site_guid'});
+	        $self->_saveXRef($paramHash{'guid'},$paramHash{'layout'},$paramHash{'ord'},$paramHash{'parent'},$paramHash{'siteGUID'});
 	}
 
 	#
@@ -1178,14 +1557,14 @@ sub saveData {
         #
         # Save the data minus the extra fields
         #
-        $self->runSQL(SQL=>"update data set extra_value='',show_login='".$self->safeSQL($paramHash{'showLogin'})."',default_element='".$self->safeSQL($paramHash{'default_element'})."',disable_title='".$self->safeSQL($paramHash{'disableTitle'})."',disable_edit_mode='".$self->safeSQL($paramHash{'disableEditMode'})."',disable_title='".$self->safeSQL($paramHash{'disableTitle'})."',lang='".$self->safeSQL($paramHash{'lang'})."',friendly_url='".$self->safeSQL($paramHash{'pageFriendlyURL'})."', active='".$self->safeSQL($paramHash{'active'})."',nav_name='".$self->safeSQL($paramHash{'navigationName'})."',name='".$self->safeSQL($paramHash{'name'})."',title='".$self->safeSQL($paramHash{'title'})."',element_type='".$self->safeSQL($paramHash{'type'})."' where guid='".$self->safeSQL($paramHash{'guid'})."' and site_guid='".$self->safeSQL($paramHash{'site_guid'})."'");
+        $self->runSQL(SQL=>"update data set extra_value='',show_login='".$self->safeSQL($paramHash{'showLogin'})."',default_element='".$self->safeSQL($paramHash{'default_element'})."',disable_title='".$self->safeSQL($paramHash{'disableTitle'})."',disable_edit_mode='".$self->safeSQL($paramHash{'disableEditMode'})."',disable_title='".$self->safeSQL($paramHash{'disableTitle'})."',lang='".$self->safeSQL($paramHash{'lang'})."',friendly_url='".$self->safeSQL($paramHash{'pageFriendlyURL'})."', active='".$self->safeSQL($paramHash{'active'})."',nav_name='".$self->safeSQL($paramHash{'navigationName'})."',name='".$self->safeSQL($paramHash{'name'})."',title='".$self->safeSQL($paramHash{'title'})."',element_type='".$self->safeSQL($paramHash{'type'})."' where guid='".$self->safeSQL($paramHash{'guid'})."' and site_guid='".$self->safeSQL($paramHash{'siteGUID'})."'");
 
         #
         # loop though and update every one that is diffrent
         #
         for my $key ( keys %paramHash ) {
                 if ($key !~ /^(ord|pageIdOfElement|keywordScore|navigationName|showResubscribe|guid_xref_site_guid|groupId|lang|pageFriendlyURL|type|guid|siteGUID|newGUID|name|element_type|active|title|disableTitle|disableEditMode|defaultElement|showLogin|parent|layout|site_guid)$/) {
-                        $self->saveExtra(table=>'data',siteGUID=>$paramHash{'site_guid'},guid=>$paramHash{'guid'},field=>$key,value=>$paramHash{$key});
+                        $self->saveExtra(table=>'data',siteGUID=>$paramHash{'siteGUID'},guid=>$paramHash{'guid'},field=>$key,value=>$paramHash{$key});
                 }
         }
 
@@ -1224,18 +1603,19 @@ sub saveExtra {
         #
         # make sure we are on a compatable table
         #
-        if ($paramHash{'table'} eq "data" || $paramHash{'table'} eq "directory" || $paramHash{'table'} eq "collection" || 
-		$paramHash{'table'} eq "profile" || $paramHash{'table'} eq "cart" ||  $paramHash{'table'} eq "topic" ||
-                ($paramHash{'table'} eq "admin_user" && $self->userValue('isAdmin') eq '1') ||
-                $paramHash{'table'} eq "trans" || $paramHash{'table'} eq "trans_item" || $paramHash{'table'} eq "coupon" || $paramHash{'table'} eq "site") {
+        if ($paramHash{'table'} =~ /^(data|directory|collection|profile|cart|topic|trans|trans_item|coupon|site)$/ ||
+                ($paramHash{'table'} eq "admin_user" && $self->userValue('isAdmin') eq '1')) {
+	
+		#
+	        # set site GUID if it wasn't passed to us
+	        #
+	        if ($paramHash{'siteGUID'} eq '') {$paramHash{'siteGUID'} = $self->{'siteGUID'} }
 
                 #
-                # set up the site_sid restriction... but user type tables don't use
+                # set up the site_sid restriction... but a lot of table types don't use
                 #
                 my $addToWhere = " and site_guid='".$self->safeSQL($paramHash{'siteGUID'})."'";
-                if ($paramHash{'table'} eq 'admin_user' || $paramHash{'table'} eq "directory" || $paramHash{'table'} eq 'site' ||
-			$paramHash{'table'} eq 'profile' || $paramHash{'table'} eq 'trans' || $paramHash{'table'} eq 'trans_item' || 
-			$paramHash{'table'} eq 'collection' ) { $addToWhere = '' }
+                if ($paramHash{'table'} =~ /^(admin_user|directory|site|profile|trans|trans_item|collection)$/ ) { $addToWhere = '' }
 
                 #
                 # get the hash from the id we are pulling from
@@ -1287,7 +1667,66 @@ sub saveExtra {
         }
 }
 
+=head2 saveQueue
 
+Save a hash to the process and message queue.
+
+        %queueHash = $fws->saveQueue(%queueHash);
+
+=cut
+
+sub saveQueue {
+        my ($self,%paramHash) = @_;
+        %paramHash = $self->runScript('preSaveQueue',%paramHash);
+
+        %paramHash = $self->_recordInit('_guidLeader'   =>'q',
+                                        '_table'        =>'queue',
+                                        %paramHash);
+
+        %paramHash = $self->_recordSave('_fields'        =>'directory_guid|profile_guid|queue_from|hash|queue_to|from_name|draft|type|subject|digital_assets|transfer_encoding|mime_type|body|scheduled_date',
+                                        '_keys'          =>'directoryGUID|userGUID|from|hash|to|fromName|draft|type|subject|digitalAssets|transferEncoding|mimeType|body|scheduledDate',
+                                        '_table'        =>'queue',
+                                        '_noExtra'      =>'1',
+                                        %paramHash);
+
+
+        %paramHash = $self->runScript('postSaveQueue',%paramHash);
+
+        return %paramHash;
+}
+
+=head2 saveQueueHistory
+
+Save a hash to the process and message queue history.
+
+        %queueHash = $fws->saveQueueHistory(%queueHash);
+
+=cut
+
+sub saveQueueHistory {
+        my ($self,%paramHash) = @_;
+        
+	%paramHash = $self->runScript('preSaveQueueHistory',%paramHash);
+      
+	#
+        # if sent date isn't set,  lets set it to NOW
+        #
+        if ($paramHash{'sentDate'} eq '' || $paramHash{'sentDate'}  =~ /^0000.00.00/) { $paramHash{'sentDate'} = $self->safeSQL($self->dateTime(format=>"SQL")) }
+
+        %paramHash = $self->_recordInit('_guidLeader'   =>'q',
+                                        '_table'        =>'queue_history',
+                                        %paramHash);
+
+        %paramHash = $self->_recordSave('_fields'       =>'synced|queue_guid|directory_guid|profile_guid|hash|scheduled_date|queue_from|from_name|queue_to|body|type|subject|success|failure_code|response|sent_date',
+                                        '_keys'         =>'synced|queueGUID|directoryGUID|profileGUID|hash|scheduledDate|from|fromName|to|body|type|subject|success|failureCode|response|sentDate',
+                                        '_table'        =>'queue_history',
+                                        '_noExtra'      =>'1',
+                                        %paramHash);
+
+        %paramHash = $self->runScript('postSaveQueueHistory',%paramHash);
+
+        return %paramHash;
+}
 
 =head2 schemaHash
 
@@ -1305,10 +1744,16 @@ sub schemaHash {
         #
         my %dataSchema;
 
+	#
+	# Get it from the element hash, (with caching enabled)
+	#
+	my %elementHash = $self->elementHash(guid=>$guid);
+	my $schemaDevel = $elementHash{'schemaDevel'};
+
         #
         # get the schemaHash
         #
-        my ($schemaCode) = @{$self->runSQL(SQL=>"select schema_devel from element where guid='".$self->safeSQL($guid)."' or type='".$self->safeSQL($guid)."'")};
+        #my ($schemaDevel) = @{$self->runSQL(SQL=>"select schema_devel from element where guid='".$self->safeSQL($guid)."' or type='".$self->safeSQL($guid)."'")};
 
         #
         # copy the self object to fws
@@ -1318,7 +1763,7 @@ sub schemaHash {
         #
         # run the eval and populate the hash (Including the title)
         #
-        eval $schemaCode;
+        eval $schemaDevel;
         my $errorCode = $@;
         if ($errorCode) { $self->FWSLog('SCHEMA ERROR: '.$guid.' - '.$errorCode) }
 
@@ -1328,7 +1773,7 @@ sub schemaHash {
         $self = $fws;
 
         return %dataSchema;
-        }
+}
 
 
 =head2 setCacheIndex
@@ -1378,7 +1823,7 @@ sub setCacheIndex {
         # update the extra table of what the cacheIndex is
         #
         $self->saveExtra(table=>'site',guid=>$paramHash{'siteGUID'},field=>'dataCacheIndex',$cacheValue);
-        }
+}
 
 =head2 tableFieldHash
 
@@ -1560,417 +2005,18 @@ sub updateDatabase {
         my ($self) = @_;
         my $db = "";
 
-
-	#
-	# build an array that we will process field by field
-	#
-        my @defs = (
-                "queue_history","guid"                  ,"char(36)"     ,"MUL"          ,"",
-                "queue_history","profile_guid"          ,"char(36)"     ,"MUL"          ,"",
-                "queue_history","directory_guid"        ,"char(36)"     ,"MUL"          ,"",
-                "queue_history","type"                  ,"char(50)"     ,"MUL"          ,"",
-                "queue_history","queue_from"            ,"char(255)"    ,"MUL"          ,"",
-                "queue_history","from_name"             ,"char(255)"    ,""             ,"",
-                "queue_history","queue_to"              ,"char(255)"    ,"MUL"          ,"",
-                "queue_history","subject"               ,"char(255)"    ,""             ,"",
-                "queue_history","success"               ,"int(1)"       ,""             ,"0",
-                "queue_history","body"                  ,"text"         ,""             ,"",
-                "queue_history","hash"                  ,"text"         ,""             ,"",
-                "queue_history","failure_code"          ,"char(255)"    ,""             ,"",
-                "queue_history","response"              ,"char(255)"    ,""             ,"",
-                "queue_history","sent_date"             ,"datetime"     ,""             ,"0000-00-00 00:00:00",
-                "queue_history","scheduled_date"        ,"datetime"     ,""             ,"0000-00-00 00:00:00",
-
-
-                "queue","guid"                          ,"char(36)"     ,"MUL"          ,"",
-                "queue","profile_guid"                  ,"char(36)"     ,"MUL"          ,"",
-                "queue","directory_guid"                ,"char(36)"     ,"MUL"          ,"",
-                "queue","type"                          ,"char(50)"     ,"MUL"          ,"",
-                "queue","queue_from"                    ,"char(255)"    ,"MUL"          ,"",
-                "queue","queue_to"                      ,"char(255)"    ,"MUL"          ,"",
-                "queue","draft"                         ,"int(1)"       ,""             ,"0",
-                "queue","from_name"                     ,"char(255)"    ,""             ,"",
-                "queue","subject"                       ,"char(255)"    ,""             ,"",
-                "queue","mime_type"                     ,"char(100)"    ,""             ,"",
-                "queue","transfer_encoding"             ,"char(100)"    ,""             ,"",
-                "queue","digital_assets"                ,"text"         ,""             ,"",
-                "queue","body"                          ,"text"         ,""             ,"",
-                "queue","hash"                          ,"text"         ,""             ,"",
-                "queue","scheduled_date"                ,"datetime"     ,""             ,"0000-00-00 00:00:00",
-
-
-                "events","site_guid"                    ,"char(36)"     ,"MUL"          ,"",
-                "events","guid"                         ,"char(36)"     ,"MUL"          ,"",
-                "events","price"                        ,"double"       ,"MUL"          ,"0",
-                "events","profile_guid"                 ,"char(36)"     ,"MUL"          ,"",
-                "events","name"                         ,"char(255)"    ,"FULLTEXT"     ,"",
-                "events","title"                        ,"char(255)"    ,"FULLTEXT"     ,"",
-                "events","city"                         ,"char(255)"    ,"MUL"          ,"",
-                "events","state"                        ,"char(255)"    ,"MUL"          ,"",
-                "events","address"                      ,"char(255)"    ,""             ,"",
-                "events","address2"                     ,"char(255)"    ,""             ,"",
-                "events","zip"                          ,"char(255)"    ,""             ,"",
-                "events","location"                     ,"char(255)"    ,""             ,"",
-                "events","website"                      ,"char(255)"    ,""             ,"",
-                "events","phone"                        ,"char(255)"    ,""             ,"",
-                "events","date_from"                    ,"datetime"     ,"MUL"          ,"0000-00-00",
-                "events","date_to"			,"datetime"     ,"MUL"          ,"0000-00-00",
-                "events","created_date"                 ,"datetime"     ,""             ,"0000-00-00",
-                "events","description"                  ,"text"         ,"FULLTEXT"     ,"",
-                "events","latitude"                     ,"float"        ,"MUL"          ,"0",
-                "events","longitude"                    ,"float"        ,"MUL"          ,"0",
-                "events","directory_guid"               ,"char(36)"     ,"MUL"          ,"",
-                "events","extra_value"                  ,"text"         ,""             ,"",
-
-                "history","site_guid"                   ,"char(36)"     ,"MUL"          ,"",
-                "history","created_date"                ,"datetime"     ,""             ,"0000-00-00",
-                "history","guid"                        ,"char(36)"     ,"MUL"          ,"",
-                "history","type"                        ,"char(1)"      ,"MUL"          ,"",
-                "history","name"                        ,"char(255)"    ,"FULLTEXT"     ,"",
-                "history","url"                         ,"char(255)"    ,""             ,"",
-                "history","title"                       ,"char(255)"    ,"FULLTEXT"     ,"",
-                "history","latitude"                    ,"float"        ,"MUL"          ,"0",
-                "history","longitude"                   ,"float"        ,"MUL"          ,"0",
-                "history","hash"                        ,"text"         ,""             ,"",
-                "history","description"                 ,"text"         ,"FULLTEXT"     ,"",
-                "history","referrer_guid"               ,"char(36)"     ,"MUL"          ,"",
-                "history","directory_guid"              ,"char(36)"     ,"MUL"          ,"",
-                "history","profile_guid"                ,"char(36)"     ,"MUL"          ,"",
-
-                "deal","site_guid"                      ,"char(36)"     ,"MUL"          ,"",
-                "deal","created_date"                   ,"datetime"     ,""             ,"0000-00-00",
-                "deal","guid"                           ,"char(36)"     ,"MUL"          ,"",
-                "deal","active"                         ,"int(1)"       ,"MUL"          ,"0",
-                "deal","type"                           ,"char(1)"      ,"MUL"          ,"",
-                "deal","name"                           ,"char(255)"    ,"FULLTEXT"     ,"",
-                "deal","latitude"                       ,"float"        ,"MUL"          ,"0",
-                "deal","longitude"                      ,"float"        ,"MUL"          ,"0",
-                "deal","price"                          ,"double"       ,"MUL"          ,"0",
-                "deal","get_amount"                     ,"double"       ,"MUL"          ,"0",
-                "deal","spend_amount"                   ,"double"       ,"MUL"          ,"0",
-                "deal","qty_sold"                       ,"int(11)"      ,""             ,"0",
-                "deal","qty_available"                  ,"int(11)"      ,""             ,"0",
-                "deal","date_from"                      ,"datetime"     ,"MUL"          ,"0000-00-00",
-                "deal","date_to"			,"datetime"     ,"MUL"          ,"0000-00-00",
-                "deal","date_use_by"                    ,"datetime"     ,"MUL"          ,"0000-00-00",
-                "deal","description"                    ,"text"         ,"FULLTEXT"     ,"",
-                "deal","fine_print"                     ,"text"         ,"FULLTEXT"     ,"",
-                "deal","image_1"                        ,"char(255)"    ,""             ,"",
-                "deal","directory_guid"                 ,"char(36)"     ,"MUL"          ,"",
-                "deal","profile_guid"                   ,"char(36)"     ,"MUL"          ,"",
-                "deal","extra_value"                    ,"text"         ,""             ,"",
-
-                "directory","site_guid"                 ,"char(36)"     ,"MUL"          ,"",
-                "directory","guid"			,"char(36)"     ,"MUL"          ,"",
-                "directory","pin"			,"char(6)"      ,"MUL"          ,"",
-                "directory","created_date"              ,"datetime"     ,""             ,"0000-00-00",
-                "directory","active"			,"int(1)"       ,"MUL"          ,"0",
-                "directory","url"			,"char(255)"    ,"MUL"          ,"",
-                "directory","name"			,"char(255)"    ,"FULLTEXT"     ,"",
-                "directory","video_1"			,"char(255)"    ,""             ,"",
-                "directory","video_2"			,"char(255)"    ,""             ,"",
-                "directory","image_1"			,"char(255)"    ,""             ,"",
-                "directory","image_2"			,"char(255)"    ,""             ,"",
-                "directory","image_3"			,"char(255)"    ,""             ,"",
-                "directory","image_4"			,"char(255)"    ,""             ,"",
-                "directory","image_5"			,"char(255)"    ,""             ,"",
-                "directory","category_1"                ,"char(255)"    ,"MUL"          ,"",
-                "directory","category_2"                ,"char(255)"    ,"MUL"          ,"",
-                "directory","category_3"                ,"char(255)"    ,"MUL"          ,"",
-                "directory","category_4"                ,"char(255)"    ,"MUL"          ,"",
-                "directory","category_5"                ,"char(255)"    ,"MUL"          ,"",
-                "directory","category_6"                ,"char(255)"    ,"MUL"          ,"",
-                "directory","address"			,"char(255)"    ,""             ,"",
-                "directory","full_address"              ,"char(255)"    ,""             ,"",
-                "directory","coupon_array"              ,"text"         ,""             ,"",
-                "directory","deal_array"                ,"text"         ,""             ,"",
-                "directory","address2"                  ,"char(255)"    ,""             ,"",
-                "directory","phone"			,"char(20)"     ,""             ,"",
-                "directory","website"			,"char(255)"    ,""             ,"",
-                "directory","cost_rating"               ,"float"        ,""             ,"0",
-                "directory","cost_rating_count"         ,"int(11)"      ,""             ,"0",
-                "directory","rating"			,"float"        ,""             ,"0",
-                "directory","rating_count"              ,"int(11)"      ,""             ,"0",
-                "directory","city"			,"char(255)"    ,"MUL"          ,"",
-                "directory","state"			,"char(255)"    ,"MUL"          ,"",
-                "directory","zip"			,"char(255)"    ,"MUL"          ,"",
-                "directory","country"			,"char(255)"    ,""             ,"",
-                "directory","facebook_id"               ,"char(255)"    ,""             ,"",
-                "directory","twitter_id"                ,"char(255)"    ,""             ,"",
-                "directory","email"			,"char(255)"    ,""             ,"",
-                "directory","description"               ,"text"         ,"FULLTEXT"     ,"",
-                "directory","latitude"                  ,"float"        ,"MUL"          ,"0",
-                "directory","longitude"                 ,"float"        ,"MUL"          ,"0",
-                "directory","level"			,"int(3)"       ,"MUL"          ,"0",
-                "directory","charity"			,"int(1)"       ,"MUL"          ,"0",
-                "directory","claimed"			,"int(1)"       ,"MUL"          ,"0",
-                "directory","claimed_profile_guid"      ,"char(36)"     ,"MUL"          ,"",
-                "directory","claimed_validator_guid"    ,"char(36)"     ,"MUL"          ,"",
-                "directory","extra_value"               ,"text"         ,""             ,"",
-
-                "topic","site_guid"                     ,"char(36)"     ,"MUL"          ,"",
-                "topic","guid"                          ,"char(36)"     ,"MUL"          ,"",
-                "topic","created_date"                  ,"datetime"     ,""             ,"0000-00-00",
-                "topic","name"                          ,"char(255)"    ,"MUL"          ,"",
-                "topic","title"                         ,"char(255)"    ,"MUL"          ,"",
-                "topic","tags"                          ,"char(255)"    ,"MUL"          ,"",
-                "topic","description"			,"text"         ,"FULLTEXT"     ,"",
-                "topic","content"                       ,"text"         ,"FULLTEXT"     ,"",
-                "topic","content_1"                     ,"text"         ,"FULLTEXT"     ,"",
-                "topic","content_2"                     ,"text"         ,"FULLTEXT"     ,"",
-                "topic","fb_content"			,"text"         ,"FULLTEXT"     ,"",
-                "topic","twitter_content"               ,"text"         ,"FULLTEXT"     ,"",
-                "topic","directory_guid"                ,"char(36)"     ,"MUL"          ,"",
-                "topic","active"                        ,"int(1)"       ,"MUL"          ,"0",
-                "topic","draft"                         ,"int(1)"       ,"MUL"          ,"0",
-                "topic","url"				,"char(255)"    ,""             ,"",
-                "topic","image_1"                       ,"char(255)"    ,""             ,"",
-                "topic","date_to"			,"date",        ,"MUL"          ,"0000-00-00",
-                "topic","date_from"			,"date",        ,"MUL"          ,"0000-00-00",
-                "topic","extra_value"                   ,"text"         ,""             ,"",
-
-                "collection","site_guid"                ,"char(36)"     ,"MUL"          ,"",
-                "collection","guid"                     ,"char(36)"     ,"MUL"          ,"",
-                "collection","created_date"             ,"datetime"     ,""             ,"0000-00-00",
-                "collection","campaignId"               ,"char(36)"     ,"MUL"          ,"0",
-                "collection","dateLastVisited"          ,"datetime"     ,""             ,"0000-00-00",
-                "collection","dateFirstVisited"         ,"datetime"     ,""             ,"0000-00-00",
-                "collection","dateComplete"             ,"datetime"     ,"MUL"          ,"0000-00-00",
-                "collection","source"                   ,"char(36)"     ,"MUL"          ,"",
-                "collection","ip"			,"char(50)"     ,""             ,"",
-                "collection","language"                 ,"char(2)"      ,""             ,"",
-                "collection","session"                  ,"char(32)"     ,""             ,"",
-                "collection","referrer"                 ,"char(255)"    ,""             ,"",
-                "collection","firstName"                ,"char(255)"    ,"MUL"          ,"",
-                "collection","lastName"                 ,"char(255)"    ,"MUL"          ,"",
-                "collection","address"                  ,"char(255)"    ,""             ,"",
-                "collection","address2"                 ,"char(255)"    ,""             ,"",
-                "collection","city"                     ,"char(255)"    ,""             ,"",
-                "collection","state"                    ,"char(255)"    ,""             ,"",
-                "collection","zip"                      ,"char(255)"    ,""             ,"",
-                "collection","email"                    ,"char(255)"    ,"MUL"          ,"",
-                "collection","country"                  ,"char(255)"    ,""             ,"",
-                "collection","purl"                     ,"char(255)"    ,""             ,"",
-                "collection","synced"                   ,"int(1)"       ,""             ,"0",
-                "collection","extra_value"              ,"text"         ,""             ,"",
-
-                "auto","make"    			,"char(255)"    ,"MUL"          ,"",
-                "auto","model"                          ,"char(255)"    ,"MUL"          ,"",
-                "auto","year"      			,"char(4)"      ,"MUL"          ,"",
-
-                "country","name"                        ,"char(255)"    ,""             ,"",
-                "country","twoCharacter"                ,"char(2)"      ,""             ,"",
-                "country","threeCharacter"              ,"char(3)"      ,""             ,"",
-
-                "zipcode","zipCode"                     ,"char(7)"      ,"MUL"          ,"",
-                "zipcode","zipType"                     ,"char(1)"      ,""             ,"",
-                "zipcode","stateAbbr"                   ,"char(2)"      ,""             ,"",
-                "zipcode","city"                        ,"char(255)"    ,"FULLTEXT"     ,"",
-                "zipcode","areaCode"                    ,"char(3)"      ,""             ,"",
-                "zipcode","timeZone"                    ,"char(12)"     ,""             ,"",
-                "zipcode","UTC"                         ,"int(10)"      ,""             ,"0",
-                "zipcode","DST"                         ,"char(1)"      ,""             ,"",
-                "zipcode","latitude"                    ,"float"        ,"MUL"          ,"0",
-                "zipcode","longitude"                   ,"float"        ,"MUL"          ,"0",
-                "zipcode","loc_id"                      ,"int(11)"      ,"MUL"          ,"0",
-
-                "geo_block","start_ip"                  ,"int(11)"      ,"MUL"          ,"0",
-                "geo_block","end_ip"                    ,"int(11)"      ,"MUL"          ,"0",
-                "geo_block","loc_id"                    ,"int(11)"      ,"MUL"          ,"0",
-
-                "templates","site_guid"                 ,"char(36)"     ,"MUL"          ,"",
-                "templates","guid"                      ,"char(36)"     ,"MUL"          ,"",
-                "templates","title"                     ,"char(255)"    ,""             ,"",
-                "templates","default_template"          ,"int(1)"       ,""             ,"0",
-                "templates","template_live"             ,"text"         ,""             ,"",
-                "templates","template_devel"            ,"text"         ,""             ,"",
-                "templates","css_live"                  ,"int(1)"       ,""             ,"0",
-                "templates","css_devel"                 ,"int(1)"       ,""             ,"0",
-                "templates","js_live"                   ,"int(1)"       ,""             ,"0",
-                "templates","js_devel"                  ,"int(1)"       ,""             ,"0",
-
-                "data_cache","site_guid"                ,"char(36)"     ,"MUL"          ,"",
-                "data_cache","guid"                     ,"char(36)"     ,"MUL"          ,"",
-                "data_cache","name"			,"char(255)"    ,"FULLTEXT"     ,"",
-                "data_cache","title"			,"char(255)"    ,"FULLTEXT"     ,"",
-                "data_cache","pageIdOfElement"          ,"char(36)"     ,""             ,"",
-                "data_cache","pageDescription"          ,"text"         ,"FULLTEXT"     ,"",
-
-                "data","site_guid"                      ,"char(36)"     ,"MUL"          ,"",
-                "data","guid"                           ,"char(36)"     ,"MUL"          ,"",
-                "data","name"                           ,"char(255)"    ,""             ,"",
-                "data","title"                          ,"char(255)"    ,""             ,"",
-                "data","nav_name"                       ,"char(255)"    ,""             ,"",
-                "data","active"                         ,"int(1)"       ,"MUL"          ,"0",
-                "data","lang"                           ,"char(2)"      ,"MUL"          ,"",
-                "data","disable_title"                  ,"int(1)"       ,"MUL"          ,"0",
-                "data","element_type"                   ,"char(50)"     ,"MUL"          ,"",
-                "data","groups_guid"                    ,"char(36)"     ,""             ,"",
-                "data","created_date"                   ,"datetime"     ,""             ,"0000-00-00",
-                "data","disable_edit_mode"              ,"int(1)"       ,""             ,"0",
-                "data","default_element"                ,"int(2)"       ,""             ,"0",
-                "data","show_login"                     ,"int(1)"       ,""             ,"1",
-                "data","show_resubscribe"               ,"int(1)"       ,""             ,"1",
-                "data","friendly_url"                   ,"char(255)"    ,""             ,"",
-                "data","extra_value"                    ,"text"         ,""             ,"",
-
-                "admin_user","site_guid"                ,"char(36)"     ,"MUL"          ,"",
-                "admin_user","guid"                     ,"char(36)"     ,"MUL"          ,"",
-                "admin_user","user_id"                  ,"char(50)"     ,"MUL"          ,"",
-                "admin_user","name"			,"char(255)"    ,""             ,"",
-                "admin_user","email"			,"char(255)"    ,""             ,"",
-                "admin_user","admin_user_password"      ,"char(50)"     ,"MUL"          ,"",
-                "admin_user","active"			,"int(1)"       ,"MUL"          ,"1",
-                "admin_user","extra_value"              ,"text"         ,""             ,"",
-
-                "profile_groups_xref","site_guid"       ,"char(36)"     ,"MUL"          ,"",
-                "profile_groups_xref","profile_guid"    ,"char(36)"     ,"MUL"          ,"",
-                "profile_groups_xref","groups_guid"     ,"char(36)"     ,"MUL"          ,"",
-
-                "profile","site_guid"			,"char(36)"     ,"MUL"          ,"",
-                "profile","guid"			,"char(36)"     ,"MUL"          ,"",
-                "profile","pin" 			,"char(6)"      ,"MUL"          ,"",
-                "profile","profile_password"            ,"char(255)"    ,""             ,"",
-                "profile","fb_access_token"             ,"char(255)"    ,""             ,"",
-                "profile","fb_id"			,"char(255)"    ,""             ,"",
-                "profile","email"			,"char(255)"    ,"MUL"          ,"",
-                "profile","name" 			,"char(255)"    ,""             ,"",
-                "profile","active"			,"int(1)"       ,""             ,"1",
-                "profile","google_id"  			,"char(255)"    ,""             ,"",
-                "profile","extra_value"                 ,"text"         ,""             ,"",
-
-                "cart","site_guid"   			,"char(36)"     ,"MUL"          ,"",
-                "cart","guid" 				,"char(36)"     ,"MUL"          ,"",
-                "cart","name"   			,"char(255)"    ,""             ,"",
-                "cart","qty"				,"int(11)"      ,""             ,"0",
-                "cart","data_guid"			,"char(36)"     ,""             ,"",
-                "cart","session"			,"char(32)"     ,""             ,"",
-                "cart","created_date"  			,"datetime"     ,""             ,"0000-00-00",
-                "cart","price"				,"double"       ,""             ,"0",
-                "cart","sku"				,"char(50)"     ,""               ,"",
-                "cart","extra_value"			,"text"         ,""             ,"",
-
-                "fws_sessions","site_guid"              ,"char(36)"     ,"MUL"          ,"",
-                "fws_sessions","ip"			,"char(50)"     ,"MUL"          ,"",
-                "fws_sessions","b"                      ,"char(255)"    ,""             ,"",
-                "fws_sessions","l"                      ,"char(50)"     ,""             ,"",
-                "fws_sessions","bs"                     ,"char(50)"     ,""             ,"",
-                "fws_sessions","e"                      ,"int(1)"       ,""             ,"0",
-                "fws_sessions","s"                      ,"int(1)"       ,""             ,"0",
-                "fws_sessions","a"                      ,"char(50)"     ,""             ,"",
-                "fws_sessions","a_exp"                  ,"int(11)"      ,""             ,"0",
-                "fws_sessions","extra"                  ,"text"         ,""             ,"",
-                "fws_sessions","created"                ,"timestamp"    ,""             ,"CURRENT_TIMESTAMP",
-
-                "guid_xref","site_guid"                 ,"char(36)"     ,"MUL"          ,"",
-                "guid_xref","child"                     ,"char(36)"     ,"MUL"          ,"",
-                "guid_xref","parent"                    ,"char(36)"     ,"MUL"          ,"",
-                "guid_xref","ord"                       ,"int(11)"      ,""             ,"0",
-                "guid_xref","layout"                    ,"char(50)"     ,""             ,"",
-
-                "element","site_guid"                   ,"char(36)"     ,"MUL"          ,"",
-                "element","guid"                        ,"char(36)"     ,"MUL"          ,"",
-                "element","type"                        ,"char(50)"     ,"MUL"          ,"",
-                "element","parent"                      ,"char(36)"     ,"MUL"          ,"",
-                "element","title"                       ,"char(255)"    ,""             ,"",
-                "element","tags"                        ,"char(255)"    ,""             ,"",
-                "element","class_prefix"                ,"char(255)"    ,""             ,"",
-                "element","admin_group"                 ,"char(50)"     ,""             ,"",
-                "element","ord"                         ,"int(11)"      ,""             ,"0",
-                "element","public"                      ,"int(1)"       ,""             ,"0",
-                "element","css_live"                    ,"int(1)"       ,""             ,"0",
-                "element","js_live"                     ,"int(1)"       ,""             ,"0",
-                "element","css_devel"                   ,"int(1)"       ,""             ,"0",
-                "element","js_devel"                    ,"int(1)"       ,""             ,"0",
-                "element","active"                      ,"int(1)"       ,""             ,"0",
-                "element","checkedout"                  ,"int(1)"       ,""             ,"0",
-                "element","root_element"                ,"int(1)"       ,""             ,"0",
-                "element","script_devel"                ,$self->{'scriptTextSize'},""   ,"",
-                "element","script_live"                 ,$self->{'scriptTextSize'},""   ,"",
-                "element","schema_devel"                ,'text',	""   		,"",
-                "element","schema_live"                 ,'text',	""   		,"",
-
-                "groups","site_guid"                    ,"char(36)"     ,"MUL"          ,"",
-                "groups","guid"                         ,"char(36)"     ,"MUL"          ,"",
-                "groups","name"                         ,"char(50)"     ,""             ,"",
-                "groups","description"                  ,"char(255)"    ,""             ,"",
-
-                "site","site_guid"                      ,"char(36)"     ,""             ,"",
-                "site","guid"                           ,"char(36)"     ,"MUL"          ,"",
-                "site","email"                          ,"char(255)"    ,""             ,"",
-                "site","name"                           ,"char(255)"    ,""             ,"",
-                "site","sid"                            ,"char(50)"     ,"MUL"          ,"",
-                "site","created_date"                   ,"datetime"     ,""             ,"0000-00-00",
-                "site","gateway_type"                   ,"char(10)"     ,""             ,"",
-                "site","gateway_user_id"                ,"char(150)"    ,""             ,"",
-                "site","gateway_password"               ,"char(150)"    ,""             ,"",
-                "site","home_guid"                      ,"char(36)"     ,""             ,"",
-                "site","js_devel"                       ,"int(1)"       ,""             ,"0",
-                "site","js_live"                        ,"int(1)"       ,""             ,"0",
-                "site","css_devel"			,"int(1)"       ,""             ,"0",
-                "site","css_live"			,"int(1)"       ,""             ,"0",
-                "site","default_site"			,"int(1)"       ,""             ,"0",
-                "site","extra_value"			,"text"         ,""             ,"",
-
-                "coupon","site_guid"                    ,"char(36)"     ,"MUL"          ,"",
-                "coupon","created_date"                 ,"datetime"     ,""             ,"0000-00-00",
-                "coupon","name"                         ,"char(255)"    ,"MUL"          ,"",
-                "coupon","date_to"			,"date",        ,"MUL"          ,"0000-00-00",
-                "coupon","date_from"			,"date",        ,"MUL"          ,"0000-00-00",
-                "coupon","persistent"			,"int(1)",      ,"MUL"          ,"0",
-                "coupon","type"                         ,"char(1)"      ,"MUL"          ,"f",
-                "coupon","amount"			,"double"       ,""             ,"0",
-                "coupon","code"                         ,"char(255)"    ,"MUL"          ,"",
-                "coupon","guid"				,"char(36)"     ,"MUL"          ,"",
-
-                "trans","site_guid"                     ,"char(36)"     ,"MUL"          ,"",
-                "trans","guid"				,"char(36)"     ,"MUL"          ,"",
-                "trans","name"   			,"char(255)"    ,"MUL"          ,"",
-                "trans","total"    			,"double"       ,""             ,"0",
-                "trans","total_cost"    		,"double"       ,""             ,"0",
-                "trans","created_date"                  ,"datetime"     ,""             ,"0000-00-00",
-                "trans","paid_date"			,"datetime"     ,""             ,"0000-00-00",
-                "trans","session"			,"char(32)"     ,""             ,"",
-                "trans","email"				,"char(255)"    ,"MUL"          ,"",
-                "trans","billing_email"                 ,"text"         ,""             ,"",
-                "trans","tracking_number"               ,"char(255)"    ,""             ,"",
-                "trans","recurring_key"                 ,"char(255)"    ,"MUL"          ,"",
-                "trans","affiliate_id"                  ,"char(32)"     ,"MUL"          ,"",
-                "trans","affiliate_id_2"                ,"char(32)"     ,"MUL"          ,"",
-                "trans","referer"			,"char(255)"    ,"MUL"          ,"",
-                "trans","archived"			,"int(1)",      ,"MUL"          ,"0",
-                "trans","recurring"			,"int(1)",      ,"MUL"          ,"0",
-                "trans","status"			,"int(11)",     ,"MUL"          ,"0",
-                "trans","paid"    			,"int(1)",      ,"MUL"          ,"0",
-                "trans","type"				,"char(2)",     ,"MUL"          ,"c",
-                "trans","date_to"			,"date",        ,"MUL"          ,"0000-00-00",
-                "trans","date_from"			,"date",        ,"MUL"          ,"0000-00-00",
-                "trans","extra_value"			,"text",        ,""             ,"",
-
-                "trans_item","site_guid"                ,"char(36)"     ,"MUL"          ,"",
-                "trans_item","guid"			,"char(36)"     ,"MUL"          ,"",
-                "trans_item","trans_guid"               ,"char(36)"     ,"MUL"          ,"",
-                "trans_item","name"			,"char(255)"    ,""             ,"",
-                "trans_item","qty"			,"int(11)"      ,""             ,"0",
-                "trans_item","data_guid"                ,"char(36)"     ,""             ,"",
-                "trans_item","price"			,"double"       ,""             ,"0",
-                "trans_item","cost"			,"double"       ,""             ,"0",
-                "trans_item","sku"                      ,"char(50)"     ,""             ,"",
-                "trans_item","extra_value"              ,"text"         ,""             ,"");
-
         #
         # loop though the records and make or update the tables
         #
         my $dbResponse;
-        while (@defs) {
-                my $table       = shift(@defs);
-                my $field       = shift(@defs);
-                my $type        = shift(@defs);
-                my $key         = shift(@defs);
-                my $default     = shift(@defs);
+        while (@{$self->{'dataSchema'}}) {
+                my $table       = shift(@{$self->{'dataSchema'}});
+                my $field       = shift(@{$self->{'dataSchema'}});
+                my $type        = shift(@{$self->{'dataSchema'}});
+                my $key         = shift(@{$self->{'dataSchema'}});
+                my $default     = shift(@{$self->{'dataSchema'}});
                 $dbResponse .= $self->alterTable(table=>$table,field=>$field,type=>$type,key=>$key,default=>$default);
         }
-
 
         #
         # get what fields we are aloud to use for data_cache
@@ -2044,6 +2090,61 @@ sub updateModifiedDate {
         }
 }
 
+=head2 userArray
+
+Return an array or reference to an array of the users on an installation.    You can pass they keywords paramater and it will look though name and email address.
+
+	#
+	# return all the users that have an email with the domain name somedomain.com
+	#
+        $userArrayRef = $fws->userArray(keywords=>'@somedomain.com');
+
+=cut
+
+sub userArray {
+        my ($self,%paramHash) = @_;
+        my @userHashArray;
+
+        #
+        # add keyword Search
+        #
+        my $whereStatement;
+        my $keywordsSQL = $self->_getKeywordSQL($paramHash{"keywords"},"name","email","extra_value");
+        if ($keywordsSQL ne '') { $whereStatement = 'where '.$keywordsSQL };
+
+        #
+        # get the data from the database and push it into the hash array
+        #
+        my $userArray = $self->runSQL(SQL=>"select fb_id,fb_access_token,name,email,guid,active,extra_value from profile ".$whereStatement);
+        while (@$userArray) {
+                #
+                # fill in the hash
+                #
+                my %userHash;
+                $userHash{'FBId'}               = shift(@$userArray);
+                $userHash{'FBAccessToken'}      = shift(@$userArray);
+                $userHash{'name'}               = shift(@$userArray);
+                $userHash{'email'}              = shift(@$userArray);
+                $userHash{'guid'}               = shift(@$userArray);
+                $userHash{'active'}             = shift(@$userArray);
+
+                #
+                # add the extra stuff to the hash
+                #
+                my $extra_value = shift(@$userArray);
+                %userHash       = $self->addExtraHash($extra_value,%userHash);
+
+                #
+                # push it into the array
+                #
+                push (@userHashArray,{%userHash});
+        }
+        if ($paramHash{'ref'} eq '1') { return \@userHashArray } else {return @userHashArray }
+}
+
+
+
+
 
 ############################################################################################
 # DATA: Delete a orphened data
@@ -2091,12 +2192,14 @@ sub _deleteOrphanedData {
 ############################################################################################
 
 sub _deleteXRef {
-        my ($self,$child,$parent,$site_guid) = @_;
-        $self->runSQL(SQL=>"delete from guid_xref where child='".$self->safeSQL($child)."' and parent='".$self->safeSQL($parent)."' and site_guid='".$self->safeSQL($site_guid)."'");
+        my ($self,$child,$parent,$siteGUID) = @_;
+        $self->runSQL(SQL=>"delete from guid_xref where child='".$self->safeSQL($child)."' and parent='".$self->safeSQL($parent)."' and site_guid='".$self->safeSQL($siteGUID)."'");
 }
 
 ############################################################################################
 # DATA: Lookup all the elements and return the hash
+#
+# NOTE: This does NOT pull back schema and scripts.  This is for lean element lookups
 ############################################################################################
 
 sub _fullElementHash {
@@ -2107,55 +2210,159 @@ sub _fullElementHash {
                 #
                 # set the site guid depending on the context
                 #
-                my $site_guid = $self->{'siteGUID'};
+                #my $siteGUID = $self->{'siteGUID'};
 
                 #
                 # if your in an admin page, you will need this so you can see the stuff in scope for the tree views
                 # it doesn't matter if it caches it, because these are ajax calls limited only to themselves
                 #
-                my $addToWhere = "(site_guid=\"".$self->safeSQL($self->fwsGUID())."\" and public=\"1\") or ";
-                if ($self->formValue('site_guid') ne "") { $addToWhere = ""; $site_guid = $self->formValue("site_guid") }
+    #            my $addToWhere = "(site_guid=\"".$self->safeSQL($self->fwsGUID())."\" and public=\"1\") or ";
+    #            if ($self->formValue('site_guid') ne "") { $addToWhere = ""; $siteGUID = $self->formValue("site_guid") }
 
 
                 #
                 # get the elementArray
                 #
-                my $elementArray = $self->runSQL(SQL=>"select guid,type,class_prefix,css_devel,css_live,js_devel,js_live,schema_devel,title,tags,parent,ord,site_guid,root_element,public,script_live,script_devel,checkedout from element where ".$addToWhere." site_guid='".$self->safeSQL($site_guid)."' order by title");
-                my $alphaOrd = 0;
+                #my $elementArray = $self->runSQL(SQL=>"select guid,type,class_prefix,css_devel,js_devel,title,tags,parent,ord,site_guid,root_element,public,checkedout from element where ".$ddToWhere." site_guid='".$self->safeSQL($siteGUID)."' order by title");
+                my $elementArray = $self->runSQL(SQL=>"select guid,type,class_prefix,css_devel,js_devel,title,tags,parent,ord,site_guid,root_element,public,checkedout from element");
+
+
+		#
+		# Push the elementHash into the Cache	
+		#	
+		%{$self->{'_fullElementHashCache'}} = %{$self->{'elementHash'}};  
+
+
                 while (@$elementArray) {
-                        $alphaOrd++;
                         my $guid                                                        = shift(@$elementArray);
                         my $type                                                        = shift(@$elementArray);
-                        $self->{'_fullElementHashCache'}->{$guid}{'alphaOrd'}           = $alphaOrd;
-                        $self->{'_fullElementHashCache'}->{$guid}{'class_prefix'}       = shift(@$elementArray);
-                        $self->{'_fullElementHashCache'}->{$guid}{'css_devel'}          = shift(@$elementArray);
-                        $self->{'_fullElementHashCache'}->{$guid}{'css_live'}           = shift(@$elementArray);
-                        $self->{'_fullElementHashCache'}->{$guid}{'js_devel'}           = shift(@$elementArray);
-                        $self->{'_fullElementHashCache'}->{$guid}{'js_live'}            = shift(@$elementArray);
-                        $self->{'_fullElementHashCache'}->{$guid}{'data_schema'}        = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'classPrefix'}        = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'cssDevel'}           = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'jsDevel'}            = shift(@$elementArray);
                         $self->{'_fullElementHashCache'}->{$guid}{'type'}               = $type;
                         $self->{'_fullElementHashCache'}->{$guid}{'title'}              = shift(@$elementArray);
                         $self->{'_fullElementHashCache'}->{$guid}{'tags'}               = shift(@$elementArray);
                         $self->{'_fullElementHashCache'}->{$guid}{'parent'}             = shift(@$elementArray);
                         $self->{'_fullElementHashCache'}->{$guid}{'ord'}                = shift(@$elementArray);
-                        $self->{'_fullElementHashCache'}->{$guid}{'site_guid'}          = shift(@$elementArray);
-                        $self->{'_fullElementHashCache'}->{$guid}{'root_element'}       = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'siteGUID'}           = shift(@$elementArray);
+                        $self->{'_fullElementHashCache'}->{$guid}{'rootElement'}        = shift(@$elementArray);
                         $self->{'_fullElementHashCache'}->{$guid}{'public'}             = shift(@$elementArray);
-                        $self->{'_fullElementHashCache'}->{$guid}{'script_live'}                = shift(@$elementArray);
-                        $self->{'_fullElementHashCache'}->{$guid}{'script_devel'}       = shift(@$elementArray);
                         $self->{'_fullElementHashCache'}->{$guid}{'checkedout'}         = shift(@$elementArray);
 
+               	}
 
-
+		#
+		# Do alpha sorting and add parent refernces if needed
+		#
+                my $alphaOrd = 0;
+	 	for my $guid ( sort { $self->{'_fullElementHashCache'}->{$a}{'title'} cmp $self->{'_fullElementHashCache'}->{$b}{'title'} } keys %{$self->{'_fullElementHashCache'}}) {
+                        $alphaOrd++;
+                        $self->{'_fullElementHashCache'}->{$guid}{'alphaOrd'}           = $alphaOrd;
+			my $type = $self->{'_fullElementHashCache'}->{$guid}{'type'};
                         if ($type ne '') {
                                 $self->{'_fullElementHashCache'}->{$type}{'guid'}       = $guid;
                                 $self->{'_fullElementHashCache'}->{$type}{'parent'}     = $self->{'_fullElementHashCache'}->{$guid}{'parent'};
                         }
-                }
+		}
         }
         return %{$self->{'_fullElementHashCache'}};
 }
 
+############################################################################################
+# _recordInit: do creation of a record if needed, and also set pins and guids
+############################################################################################
+
+sub _recordInit {
+        my ($self, %paramHash) = @_;
+
+        #
+        # lets make sure we are not updateing the same record or adding a new one we shouldn't
+        #
+        if ($paramHash{'guid'} eq '') {
+                #
+                # set the dirived stuff so nobody gets sneeky and tries to pass it to the procedure
+                #
+                if ($paramHash{'siteGUID'} eq '') 	{ $paramHash{'siteGUID'} = $self->{'siteGUID'} }
+                if ($paramHash{'_guidLeader'} eq '') 	{ $paramHash{'_guidLeader'} = 'r' }
+                $paramHash{'siteGUID'} = $self->safeSQL($paramHash{'siteGUID'});
+                $paramHash{'guid'}      = $self->createGUID($paramHash{'_guidLeader'});
+                $self->runSQL(SQL=>"insert into ".$self->safeSQL($paramHash{'_table'})." (guid,site_guid,created_date) values ('".$paramHash{'guid'}."','".$paramHash{'siteGUID'}."','".$self->dateTime(format=>"SQL")."')");
+        }
+
+        if (($paramHash{'_table'} eq 'directory' || $paramHash{'_table'} eq 'profile') && $paramHash{'pin'} eq '') {
+                #
+                # set the dirived stuff so nobody gets sneeky and tries to pass it to the procedure
+                #
+                $paramHash{'pin'} = $self->createPin();
+                $self->runSQL(SQL=>"update ".$self->safeSQL($paramHash{'_table'})." set pin='".$self->safeSQL($paramHash{'pin'})."' where guid='".$self->safeSQL($paramHash{'guid'})."'");
+        }
+
+        return %paramHash;
+}
+
+############################################################################################
+# _recordSave: save a record with generic record structure
+############################################################################################
+
+sub _recordSave {
+        my ($self, %paramHash) = @_;
+
+        #
+        # for completeness lets hold on to this so we can return it
+        #
+        my %paramHolder = %paramHash;
+
+        #
+        # define the SQL starter statement
+        #
+        my $SQL = "update ".$self->safeSQL($paramHash{'_table'})." set ";
+
+        #
+        # make arrays usable
+        #
+        my @fields = split(/\|/,$paramHash{'_fields'});
+        my @fieldKeys = split(/\|/,$paramHash{'_keys'});
+
+        #
+        # add each field thats a core field
+        #
+        for my $i (0 .. $#fields) {
+                $SQL .= $fields[$i]."='".$self->safeSQL($paramHash{$fieldKeys[$i]})."'," ;
+                #
+                # for the next step delete the keys that should not be updated
+                #
+                delete $paramHash{$fieldKeys[$i]};
+        }
+
+        #
+        # trim off last ,
+        #
+        $SQL =~ s/,$//sg;
+
+        #
+        # add scope to the statement
+        #
+        $SQL .= " where guid='".$self->safeSQL($paramHash{"guid"})."'";
+
+        $self->runSQL(SQL=>$SQL);
+
+        #
+        # save the keys in the ext field;
+        #
+        my $keyReg = $paramHash{'_keys'};
+        for my $key ( keys %paramHash ) {
+                if (    $key !~ /^_/ &&
+                        $key !~ /^guid$/ &&
+                        $key !~ /^site_guid$/ &&
+                        $key !~ /^siteGUID$/ &&
+                        $key !~ /^pin$/) {
+			if ($paramHash{'_noExtra'} ne '1') {
+                        	$self->saveExtra(table=>$paramHash{'_table'},guid=>$paramHash{'guid'},field=>$key,value=>$paramHash{$key});
+				}
+                }
+        }
+        return %paramHolder;
+}
 
 ############################################################################################
 # FORMAT: Pass keywords and field list, and create a wellformed where statement for keyword
@@ -2214,17 +2421,17 @@ sub _getKeywordSQL {
 ############################################################################################
 
 sub _saveXRef {
-        my ($self,$child,$layout,$ord,$parent,$site_guid) = @_;
+        my ($self,$child,$layout,$ord,$parent,$siteGUID) = @_;
 
 	#
 	# delete the old one if its there
 	#
-        $self->_deleteXRef($child,$parent,$site_guid);
+        $self->_deleteXRef($child,$parent,$siteGUID);
 
 	#
 	# add the new one
 	#
-        $self->runSQL(SQL=>"insert into guid_xref (child,layout,ord,parent,site_guid) values ('".$self->safeSQL($child)."','".$self->safeSQL($layout)."','".$self->safeSQL($ord)."','".$self->safeSQL($parent)."','".$self->safeSQL($site_guid)."')");
+        $self->runSQL(SQL=>"insert into guid_xref (child,layout,ord,parent,site_guid) values ('".$self->safeSQL($child)."','".$self->safeSQL($layout)."','".$self->safeSQL($ord)."','".$self->safeSQL($parent)."','".$self->safeSQL($siteGUID)."')");
 
 }
 

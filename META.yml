@@ -1,5 +1,5 @@
 ---
-abstract: 'Framework Sites Version 2'
+abstract: 'Framework Sites version 2'
 author:
   - 'Nate Lewis <nlewis@gnetworks.com>'
 build_requires:
@@ -26,4 +26,4 @@ requires:
   Storable: 0
   Test::More: 0
   Time::Local: 0
-version: 0.006
+version: 0.007

@@ -296,6 +296,17 @@ sub googleAppsKeyFile {
         return $self->{"googleAppsKeyFile"};
 }
 
+=head2 siteGlobalValue
+
+Deprecated, use siteValue()
+
+=cut
+
+sub siteGlobalValue {
+        my ($self,$key,$value) = @_;
+        return $self->siteValue($key,$value);
+}
+
 =head2 skipIpCheckOnLogin
 
 Deprecated, session management was updated to improve ip checking to make this no longer required.
@@ -400,8 +411,8 @@ Should be set when calling new() and can be accessed via $fws->{'scriptName'};
 
 sub scriptName {
         my ( $self, $scriptName ) = @_;
-        if (defined $scriptName) { $self->{"_scriptName"} = $scriptName }
-        return $self->{"_scriptName"};
+        if (defined $scriptName) { $self->{"scriptName"} = $scriptName }
+        return $self->{"scriptName"};
 }
 
 =head2 secureDomain

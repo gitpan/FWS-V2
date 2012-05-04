@@ -1,5 +1,5 @@
 {
-   "abstract" : "Framework Sites Version 2",
+   "abstract" : "Framework Sites version 2",
    "author" : [
       "Nate Lewis <nlewis@gnetworks.com>"
    ],
@@ -44,5 +44,5 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.006"
+   "version" : "0.007"
 }

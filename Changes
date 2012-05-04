@@ -1,4 +1,17 @@
 Revision history for FWS-V2
+0.007 2012-05-03
+ - Added removeHTML() and formatCurrency()
+ - Added adminUserArray(),adminPageHeader()
+ - Added dayMod to the dateTime method
+ - Minor bug in session creation fixed causing short session ids
+ - newDBCheck() added
+ - 2.1 Plugin Implemented
+ - CSVExport added
+ - Removed plugin specific methods added before plugin implementation
+
+0.006 2012-03-16
+ - Corrected document formatting error
+ - Change to the create homeGUID session code to ensure a blank parent
 
 0.005 2012-03-14
  - Added dataDelete()

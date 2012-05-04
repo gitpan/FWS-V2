@@ -80,7 +80,7 @@ Gather the passed form values, and from it set the language formValue and the se
         #
         # get the array
         #
-        my @formArray = $fws->formArray();
+        $fws->getFormValues();
 
 =cut
 
@@ -183,12 +183,12 @@ Set default values derived from the site settings for a site.  This will also se
 
         #
         # currently rendered site
-	#
+        #
         $fws->setSiteValues();
 
         #
         # set site values for some other site
-	#
+        #
         $fws->setSiteValues('othersite');
 
 =cut
@@ -235,7 +235,7 @@ sub setSiteValues {
         #
         # check to see if there is no level... if so then we need create a new admin account
         #
-        if ($self->{'siteGUID'} eq '') { $self->newDBCheck() }
+        if ($self->{'siteGUID'} eq '') { print $self->newDBCheck() }
 
         #
         # convert the values and fields to global valuse
@@ -247,12 +247,6 @@ sub setSiteValues {
         # get the keys and and set them
         #
         for my $key ( keys %siteHash) { $self->siteValue($key,$siteHash{$key}) }
-
-        #
-        # set the home guid and css flags.  Set devel and live for compatablity
-        #
-        $self->siteValue('cssLive',$self->{"site"}{'cssDevel'});
-        $self->siteValue('jsLive',$self->{"site"}{'jsDevel'});
 
         #
         # set the data cache hash
@@ -280,6 +274,10 @@ sub setSiteValues {
         # set where we will get FWS files from
         #
         $self->{'fileFWSPath'} = $self->fileWebPath().'/fws';
+
+
+
+
 }
 
 =head2 siteValue
@@ -330,8 +328,13 @@ sub userValue {
 sub _saveWithSessionHash {
         my ( $self, %saveWithSessionHash ) = @_;
         if (keys %saveWithSessionHash) { %{$self->{"_saveWithSessionHash"}} = %saveWithSessionHash }
+
+	#
+	# add the save with session site value directive also
+	#
         my @addSession = split(/,/,$self->siteValue('saveWithSession'));
         while (@addSession) { ${$self->{"_saveWithSessionHash"}}{shift @addSession} = 1 }
+
         return %{$self->{"_saveWithSessionHash"}};
 }
 

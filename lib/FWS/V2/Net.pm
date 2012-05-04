@@ -98,6 +98,145 @@ sub HTTPRequest {
 }
 
 
+
+=head2 send
+
+Send an email: Documentation needed.
+
+=cut
+
+sub send {
+        my ($self,%paramHash) = @_;
+
+        my @digitalAssets;
+        if ($paramHash{'digitalAssets'}) { @digitalAssets = split(/\|/,$paramHash{'digitalAssets'}) }
+
+
+        #
+        # set the stuff if its not specified
+        #
+        if ($paramHash{'characterSet'} eq '') 		{ $paramHash{'characterSet'} 	= 'utf-8' }
+        if ($paramHash{'transferEncoding'} eq '') 	{ $paramHash{'transferEncoding'}= '7bit' }
+        if ($paramHash{'mimeType'} eq '') 		{ $paramHash{'mimeType'} 	= 'text/html' }
+        if ($paramHash{'from'} eq '') 			{ $paramHash{'from'} 		=  $self->{'email'} }
+        if ($paramHash{'fromName'} eq '') 		{ $paramHash{'fromName'} 	=  $self->{'email'} }
+
+        $paramHash{'type'}      = $self->{'sendMethod'};
+
+        #
+        # if this has a scheduled date, lets put it in the queue, instead of sending it
+        #
+        if ((($paramHash{'scheduledDate'} ne '') || ($paramHash{'type'} ne '' && $paramHash{'type'} ne 'sendmail')) && $paramHash{'fromQueue'} ne '1') {
+                $self->saveQueue(%paramHash);
+        }
+        elsif ($paramHash{'draft'} ne '1') {
+
+                #
+                # Switch anything that could have been URIed and changed to html tags that will need to be put back to regular chars.
+                #
+                $paramHash{'from'} =~ s/&#160;/ /sg;
+                $paramHash{'from'} =~ s/;/ /sg;
+                $paramHash{'from'} =~ s/\t/ /sg;
+                $paramHash{'from'} =~ s/\n/ /sg;
+                $paramHash{'from'} =~ s/,/ /sg;
+
+                $paramHash{'to'} =~ s/&#160;/ /sg;
+                $paramHash{'to'} =~ s/;/ /sg;
+                $paramHash{'to'} =~ s/\t/ /sg;
+                $paramHash{'to'} =~ s/\n/ /sg;
+                $paramHash{'to'} =~ s/,/ /sg;
+
+
+
+                #
+                # only use the first one if there is more than one in a list.
+                #
+                my @mailFromSplit 	= split(' ',$paramHash{'from'});
+                $paramHash{'from'} 	= $mailFromSplit[0];
+                if ($paramHash{'fromName'} eq '') { $paramHash{'fromName'} = $paramHash{'from'} }
+
+
+                my $evalEmail = '';
+                #
+                # Split the emailTo's space delmited and process them one by one.
+                #
+                my (@emailAccounts) =  split(/ /,$paramHash{'to'});
+                while (@emailAccounts) {
+
+
+                        #
+                        # if this didn't come into the queue, lets just put it in the history now so we know this went down
+                        #
+                        $self->saveQueueHistory(%paramHash);
+
+                        $paramHash{'to'} = shift @emailAccounts;
+
+
+                        #
+                        # For security reasons lets get rid of all the stuff that could potentialy be dangerous
+                        #
+                        $paramHash{'to'} =~ s/\>//sg;
+                        $paramHash{'to'} =~ s/\<//sg;
+                        $paramHash{'to'} =~ s/\`//sg;
+                        $paramHash{'to'} =~ s/\///sg;
+
+
+                        if ($self->{'sendMethod'} eq '' || $self->{'sendMethod'} eq 'sendmail') {
+
+
+                                my $boundary = "_-------------".$self->createPassword(composition=>'1234567890',lowLength=>16,highLength=>16);
+
+                                #
+                                # Make sure this email is cool. otherwise we might get interneral server errors
+                                #
+                                if ($paramHash{'to'} =~ /^[^@]+@[^@]+.[a-z]{2,}$/i) {
+
+                                        use MIME::Base64;
+
+                                        open SENDMAIL, "|".$self->{'sendmailBin'}." -t" or die "Cannot open ".$self->{'sendmailBin'};
+
+                                        print SENDMAIL "Reply-To: \"".$paramHash{'fromName'}."\" <".$paramHash{'from'}.">\n";
+                                        print SENDMAIL "From: \"".$paramHash{'fromName'}."\" <".$paramHash{'from'}.">\n";
+                                        print SENDMAIL "MIME-Version: 1.0\n";
+                                        print SENDMAIL "To: ".$paramHash{'to'}."\n";
+                                        print SENDMAIL "Subject: ".$paramHash{'subject'}."\n";
+                                        print SENDMAIL "Content-Type: multipart/mixed;";
+                                        print SENDMAIL "\n\tboundary=\"".$boundary."\"\n";
+                                        print SENDMAIL "\nThis is a multi-part message in MIME format.\n";
+                                        print SENDMAIL "\n--".$boundary."\n";
+                                        print SENDMAIL "Content-Type: ".$paramHash{'mimeType'}."; charset=".$paramHash{'characterSet'}."\n";
+                                        print SENDMAIL "Content-Transfer-Encoding: ".$paramHash{'transferEncoding'}."\n\n";
+                                        print SENDMAIL $paramHash{'body'};
+
+
+
+                                        #
+                                        # Add the attachments
+                                        #
+                                        for my $fileName (@digitalAssets) {
+                                                if ((-e $fileName) && ($fileName ne '')) {
+                                                        my $justFileName = $self->justFileName($fileName);
+
+                                                        print SENDMAIL "\n--".$boundary."\n";
+                                                        print SENDMAIL "Content-Type: application/octet-stream;\n";
+                                                        print SENDMAIL "\tname=\"".$justFileName."\"\n";
+                                                        print SENDMAIL "Content-Transfer-Encoding: base64\n";
+                                                        print SENDMAIL "Content-Disposition: attachment\n";
+                                                        print SENDMAIL "\tfilename=\"".$justFileName."\"\n\n";
+                                                        print SENDMAIL $self->getEncodedBinary($fileName);
+                                                }
+                                        }
+                                        print SENDMAIL "\n--".$boundary."--\n\n";
+                                        close(SENDMAIL);
+                                }
+                        }
+
+                }
+        }
+        return '';
+}
+
+
 =head1 AUTHOR
 
 Nate Lewis, C<< <nlewis at gnetworks.com> >>

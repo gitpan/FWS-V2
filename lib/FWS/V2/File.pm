@@ -5,7 +5,7 @@ use strict;
 
 =head1 NAME
 
-FWS::V2::File - Framework Sites version 2 file methods
+FWS::V2::File - Framework Sites version 2 text and image file methods
 
 =head1 VERSION
 
@@ -33,7 +33,6 @@ our $VERSION = '0.002';
 
 Framework Sites version 2 file writing, reading and manipulation methods.
 
-
 =head1 METHODS
 
 =head2 createSizedImages
@@ -55,7 +54,7 @@ sub createSizedImages {
         my %dataSchema  = $self->schemaHash($dataHash{'type'});
 
         #
-        # if site_guid is blank, lets get the one of the site we are on
+        # if siteGUID is blank, lets get the one of the site we are on
         #
         if ($paramHash{'siteGUID'} eq '') { $paramHash{'siteGUID'} = $self->{'siteGUID'} }
 
@@ -87,6 +86,8 @@ sub createSizedImages {
                         for my $fieldName ( keys %dataSchema ) {
                                 if ($dataSchema{$fieldName}{'fieldParent'} eq $field && $dataSchema{$fieldName}{'fieldParent'} ne '' ){
 
+
+
                                         #
                                         # A directive to create a new image exists!  lets figure out where and how, and do it
                                         #
@@ -94,6 +95,7 @@ sub createSizedImages {
                                         my $newDirectory        = $self->safeDir($dirPath.'/'.$paramHash{'siteGUID'}.'/'.$paramHash{'guid'}.'/'.$fieldName);
                                         my $newFile             = $newDirectory."/".$fileName;
                                         my $webFile             = $self->{'fileWebPath'}.'/'.$paramHash{'siteGUID'}.'/'.$paramHash{'guid'}.'/'.$fieldName.'/'.$fileName;
+
 
                                         #
                                         # make the image width 100, if its not specified
@@ -181,6 +183,177 @@ sub fileArray {
         }
         return \@fileHashArray;
 }
+
+=head2 getEncodedBinary
+
+Retrive a file and convert it into a base 64 encoded binary.
+
+        #
+        # Get the file
+        #
+        my $base64String = $fws->getEncodedBinary($someFileWeWantToConvert);
+
+=cut
+
+sub getEncodedBinary {
+        my ($self,$fileName) = @_;
+
+        #
+        #convert file to base64
+        #
+        use MIME::Base64;
+        my $rawFile;
+
+        open (FILE, $fileName) or die "Can not open file:". $fileName;
+        binmode FILE;
+        while ( read (FILE, my $buffer, 1)) { $rawFile .= $buffer }
+        close (FILE);
+
+	my $rawfile =encode_base64($rawFile);
+	return $rawfile;
+}
+
+
+=head2 packDirectory
+
+MIME encode a directory ready for a FWS export.
+
+        #
+        # Get the file
+        #
+        my $packedFileString = $fws->packDirectory($someDirectory);
+
+=cut
+
+sub packDirectory {
+        my ($self,$dir) = @_;
+	
+	#
+	# this will need some MIME and file find action
+	#
+	use File::Find;
+        use MIME::Base64;
+
+	#
+	# PH for the return
+	#
+	my $packFile;
+
+        finddepth(sub {
+                #
+                # clean up the name so it will always be consistant
+                #
+                my $fullFileName = $File::Find::name;
+                my $file = $fullFileName;
+                my $dirPath = $self->{'filePath'};
+                #my $dirSecurePath = $self->{'fileSecurePath'};
+	
+		#
+		# set FILE or SECUREFILE as type
+		#
+		my $fileType = 'FILE';
+		#if ($file =~ /^$dirSecurePath/) { $fileType = 'SECUREFILE' }
+
+		#
+		# get rid of either
+		#
+		$file =~ s/^$dirPath//sg;
+		#$file =~ s/^$dirSecurePath//sg;
+
+		#
+		# move though the files
+		#
+                if (-f $fullFileName) {
+                                #
+                                # print the header of the file "FILE|fileName";
+                                #
+                                $packFile .= $fileType.'|'.$file."\n";
+
+                                #
+                                # get the file
+                                #
+                                my $rawFile;
+                                open (FILE, $fullFileName) or die "Can not open file:". $!;
+                                binmode FILE;
+                                while ( read (FILE, my $buffer, 1)) { $rawFile .= $buffer }
+                                close (FILE);
+
+                                #
+                                # encode it
+                                #
+                                $packFile .= encode_base64($rawFile);
+
+                                #
+                                # footer around the file
+                                #
+                                $packFile .= $fileType.'_END|'.$file."\n";
+                                }
+                }, $dir);
+	return $packFile;
+	}
+
+
+=head2 saveEncodedBinary
+
+Decode a base 64 encoded string and save it as its file.
+
+        #
+        # Save the file
+        #
+        $fws->saveEncodedBinary($someFileWeWantToSave,$theBase64EcodedString);
+
+=cut
+
+sub saveEncodedBinary {
+        my ($self,$fileName,$rawFile)= @_;
+        use MIME::Base64;
+        #
+        # take a base64 text string, and save it to filesystem
+        #
+        open (FILE, ">".$fileName) or die "Can not write file ".$fileName ." because: ". $!;
+        binmode FILE;
+        $rawFile = decode_base64($rawFile);
+        print FILE $rawFile;
+        close (FILE);
+}
+
+
+=head2 getPluginVersion
+
+Extract the version from a FWS plugin.  If no version is labeled or exists it will return 0.0000.
+
+	#
+	# The version line in FWS plugins will look like this:
+	#
+	# our $VERSION = '0.0001';
+	#
+        
+	my $version = $fws->getPluginVersion($somePluginFile);
+
+=cut
+
+sub getPluginVersion {
+	my ($self,$pluginFile) = @_;
+
+	#
+	# set the default
+	#
+	my $version = '0.0000';
+
+	#
+	# open the file and extract it
+	#
+	open (FILE, $self->safeDir($pluginFile));
+        while (<FILE>) {
+        	my $line = $_ ;
+	        $line =~ /\$VERSION(\s*)=(\s*)'(.*?)'/;
+    		my $verCheck = $3;
+        	if ($verCheck ne '') { $version = $verCheck }
+	}
+	return $version
+}
+
+
 
 =head2 makeDir
 
@@ -327,13 +500,14 @@ sub saveImage {
         #
         # create new image
         #
-        my $image = GD::Image->new($paramHash{'sourceFile'});
+        my $image = GD::Image->new($paramHash{'sourceFile'}) || warn 'Image cannot be opened by GD for resizing - it is corrupt'.$@;
 
 
         #
         # if we truely have an image lets continue if not, lets pretend this didn't even happen
         #
         if (defined $image) {
+
 
                 #
                 # get current widht/height for mat to resize

@@ -82,6 +82,27 @@ sub safeFile {
         return $incommingText;
 }
 
+=head2 safeNumber
+
+Make sure a number is a valid number and strip anything that would make it not.  The first character in the string has to be a '-' for the number to maintain its negative status.
+
+        #
+        # will return -34663.43
+        #
+        print $fws->safeNumber("- $34,663.43");
+
+=cut
+
+sub safeNumber {
+        my ($self,$number) = @_;
+        my $negative = 0;
+        if ($number =~ /^-/) { $negative = 1 }
+        $number =~ s/[^\d.]+//g;
+        if ($negative) { return '-'.($number+0) }
+        else { return $number+0 }
+}
+
+
 
 =head2 safeSQL
 
