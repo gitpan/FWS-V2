@@ -9,11 +9,11 @@ FWS::V2::File - Framework Sites version 2 text and image file methods
 
 =head1 VERSION
 
-Version 0.002
+Version 0.003
 
 =cut
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 
 =head1 SYNOPSIS
@@ -42,6 +42,10 @@ Create all of the derived images from a file upload based on its schema definiti
 	my %dataHashToUpdate = $fws->dataHash(guid=>'someGUIDThatHasImagesToUpdate');
 	$fws->createSizedImages(%dataHashToUpdate);
 
+If the data hash might not be correct because it is actually stored in a different table you can pass the field name you wish to update
+
+	$fws->createSizedImages(guid=>'someGUID',image_1=>'/someImage/image.jpg');
+
 =cut
 
 sub createSizedImages {
@@ -50,8 +54,8 @@ sub createSizedImages {
         #
         # going to need the current hash plus its derived schema to figure out what we should be making
         #
-        my %dataHash    = $self->dataHash(guid=>$paramHash{'guid'});
-        my %dataSchema  = $self->schemaHash($dataHash{'type'});
+        my %dataHash    = (%paramHash,$self->dataHash(guid=>$paramHash{'guid'}));
+        my %schemaHash  = $self->schemaHash($dataHash{'type'});
 
         #
         # if siteGUID is blank, lets get the one of the site we are on
@@ -66,8 +70,9 @@ sub createSizedImages {
                 #
                 # for non secure files lets prune the 640,custom, and thumb fields
                 #
-                my $dataType = $dataSchema{$field}{fieldType};
+                my $dataType = $schemaHash{$field}{fieldType};
                 if ($dataType eq 'file' || $dataType eq 'secureFile') {
+		
 
                         #
                         # get just the file name... we will use this a few times
@@ -83,8 +88,8 @@ sub createSizedImages {
 			#
                         # check for thumb creation... if so lets do it!
                         #
-                        for my $fieldName ( keys %dataSchema ) {
-                                if ($dataSchema{$fieldName}{'fieldParent'} eq $field && $dataSchema{$fieldName}{'fieldParent'} ne '' ){
+                        for my $fieldName ( keys %schemaHash ) {
+                                if ($schemaHash{$fieldName}{'fieldParent'} eq $field && $schemaHash{$fieldName}{'fieldParent'} ne '' ){
 
 
 
@@ -100,7 +105,7 @@ sub createSizedImages {
                                         #
                                         # make the image width 100, if its not specified
                                         #
-                                        if ($dataSchema{$fieldName}{'imageWidth'} < 1) { $dataSchema{$fieldName}{'imageWidth'} = 100 }
+                                        if ($schemaHash{$fieldName}{'imageWidth'} < 1) { $schemaHash{$fieldName}{'imageWidth'} = 100 }
 
                                         #
                                         # Make the subdir if its not already there
@@ -110,7 +115,7 @@ sub createSizedImages {
                                         #
                                         # create the new image
                                         #
-                                        $self->saveImage(sourceFile=>$directory.'/'.$fileName,fileName=>$newFile,width=>$dataSchema{$fieldName}{'imageWidth'});
+                                        $self->saveImage(sourceFile=>$directory.'/'.$fileName,fileName=>$newFile,width=>$schemaHash{$fieldName}{'imageWidth'});
 
                                         #
                                         # if its a secure file, we only save it from site guid on...
@@ -121,11 +126,13 @@ sub createSizedImages {
                                         # if the new image is not there, then lets blank out the file
                                         #
                                         if (!-e $newFile) { $webFile = '' }
-					
-                                        #
-                                        # save a blank one, or save a good one
-                                        #
-                                        $self->saveExtra(table=>'data',siteGUID=>$paramHash{'siteGUID'},guid=>$paramHash{'guid'},field=>$fieldName,value=>$webFile);
+				
+					if ($paramHash{'guid'} ne '') {
+	                                        #
+	                                        # save a blank one, or save a good one
+	                                        #
+	                                        $self->saveExtra(table=>'data',siteGUID=>$paramHash{'siteGUID'},guid=>$paramHash{'guid'},field=>$fieldName,value=>$webFile);
+                                	}
                                 }
                         }
                 }
@@ -310,7 +317,7 @@ sub saveEncodedBinary {
         #
         # take a base64 text string, and save it to filesystem
         #
-        open (FILE, ">".$fileName) or die "Can not write file ".$fileName ." because: ". $!;
+        open (FILE, ">".$fileName);
         binmode FILE;
         $rawFile = decode_base64($rawFile);
         print FILE $rawFile;
@@ -431,42 +438,51 @@ Run a FWS element script.  This should not be used outside of the FWS core.  The
 =cut
 
 sub runScript {
-        my ($self,$scriptID,%valueHash) = @_;
+        my ($self,$guid,%valueHash) = @_;
 
-        #
-        # if we have a cached version lets make one
-        #
-        if (!keys %{$self->{'_siteScriptCache'}}) {
-                my $scriptArray = $self->runSQL(SQL=>"select element.type,element.script_devel from element left join site on element.site_guid=site.guid where element.type <> '' and site.sid ='".$self->safeSQL($self->{'siteId'})."' order by element.ord");
-                while (@$scriptArray) {
-                        my $scriptGUID                                  = shift(@$scriptArray);
+	#
+	# if this is blank, lets just not do it
+	#
+	if ($guid ne '') {
+		#
+	        # copy the self object to fws
+	        #
+	        my $fws = $self;
 
-			#
-			# append them together if they are the script id (multipule inits....)
-			#
-                        $self->{'_siteScriptCache'}->{$scriptGUID}      .= shift(@$scriptArray);
-                }
-        }
+		#
+		# get the short hand hash to see whats up
+		#	
+		my %fullElementHash = $self->_fullElementHash();
+	        
+		for my $fullGUID ( sort { $fullElementHash{$a}{'alphaOrd'} <=> $fullElementHash{$b}{'alphaOrd'} } keys %fullElementHash) {
 
-        #
-        # copy the self object to fws
-        #
-        my $fws = $self;
+                        #
+                        # lets see if we have a match
+                        #
+                        my $liveGUID;
+                        if ($fullGUID eq $guid) { $liveGUID = $fullElementHash{$fullGUID}{guid} }
+                        if ($fullElementHash{$fullGUID}{type} eq $guid) { $liveGUID = $fullElementHash{$fullGUID}{guid} }
 
-        #
-        # if the script hash exists, do it up!
-        #
-        if (exists $self->{'_siteScriptCache'}->{$scriptID}) {
-                eval $self->{'_siteScriptCache'}->{$scriptID};
-                my $errorCode = $@;
-                if ($errorCode) { $self->FWSLog($scriptID,$errorCode) }
-        }
+                        #
+                        # we snagged one!  lets do it!
+                        #
+                        if ($liveGUID ne "") {
+                                my %elementHash = $fws->elementHash(guid=>$liveGUID);
 
-        #
-        # now put it back
-        #
-        $self = $fws;
-
+				if ($elementHash{'scriptDevel'} ne '') {
+					eval $elementHash{'scriptDevel'};
+			                my $errorCode = $@;
+			                if ($errorCode) { $self->FWSLog($guid,$errorCode) }
+				}
+			}
+		}	
+	
+		#
+		# now put it back
+		#
+		$self = $fws;
+		
+	}
         #
         # return the valueHash back in case the script altered it
         #
@@ -500,14 +516,15 @@ sub saveImage {
         #
         # create new image
         #
-        my $image = GD::Image->new($paramHash{'sourceFile'}) || warn 'Image cannot be opened by GD for resizing - it is corrupt'.$@;
-
+	my $image;
+	if (! ($image =  GD::Image->new($paramHash{'sourceFile'}) ) )  {
+		$self->FWSLog('Image cannot be opened by GD for resizing, it might be currupt: '.$paramHash{'sourceFile'});
+	}
 
         #
         # if we truely have an image lets continue if not, lets pretend this didn't even happen
         #
-        if (defined $image) {
-
+	else {
 
                 #
                 # get current widht/height for mat to resize

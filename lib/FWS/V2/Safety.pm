@@ -9,11 +9,11 @@ FWS::V2::Safety - Framework Sites version 2 safe data wrappers
 
 =head1 VERSION
 
-Version 0.001
+Version 0.002
 
 =cut
 
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 
 
 =head1 SYNOPSIS
@@ -121,6 +121,36 @@ sub safeSQL {
         $incommingText =~ s/\\/\\\\/sg;
         return $incommingText;
 }
+
+
+
+
+=head2 safeURL
+
+Switch a string into a safe url by replacing all non 0-9 a-z A-Z with a dash but not start with a dash.  For SEO reasons this will also switch any & with the word "and".
+
+        #
+        # change the product name into a safe url
+        #
+        my $productName = 'My super cool product & title';
+	my $frindlyURL = $fws->safeURL($productName).'.html';
+
+	#
+	# change an name into a safe class name
+	#
+	my $productAttribute = 'Size: Large';
+	my $className = 'productAttribute_'.$fws->safeURL($productAttribute);
+
+=cut
+
+sub safeURL {
+        my ($self, $incommingText) = @_;
+        $incommingText =~ s/\&/and/sg;
+        $incommingText =~ s/[^0-9a-zA-Z]/_/sg;
+	$incommingText =~ s/^\s+//;
+        return $incommingText;
+}
+
 
 
 =head1 AUTHOR

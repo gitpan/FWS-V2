@@ -9,11 +9,11 @@ FWS::V2::Session - Framework Sites version 2 session related methods
 
 =head1 VERSION
 
-Version 0.004
+Version 0.005
 
 =cut
 
-our $VERSION = '0.004';
+our $VERSION = '0.005';
 
 
 =head1 SYNOPSIS
@@ -95,18 +95,12 @@ sub getFormValues {
         # grab the one from the cookie if we have it
         #
         my $cookieSession = $cgi->cookie($self->{'sessionCookieName'});
-
-        if ($cookieSession ne '' && $self->{"form"}{"session"} eq '') {
-                $self->{"form"}{"session"} = $cookieSession;
-        }
+        if ($cookieSession ne '' && $self->{"form"}{"session"} eq '') { $self->{"form"}{"session"} = $cookieSession }
 
         #
         # if fws_lang is not set, lets set it
         #
-        if ($self->{"form"}{"fws_lang"} eq '') {
-                $self->{"form"}{"fws_lang"} = $cgi->cookie('fws_lang');
-        }
-        $self->language(uc($self->{"form"}{"fws_lang"}));
+        if ($self->{"form"}{"fws_lang"} ne '') { $self->language(uc($self->{"form"}{"fws_lang"})) }
 }
 
 =head2 language
@@ -132,8 +126,8 @@ sub language {
                 my @langArray = $self->languageArray();
                 $self->{"_language"} = $langArray[0];
         }
-        if ($self->{"_language"} eq '') {  $self->{"_language"} = 'en' }
-        return $self->{"_language"};
+        if ($self->{"_language"} eq '') {  $self->{"_language"} = 'EN' }
+        return uc($self->{"_language"});
 }
 
 =head2 languageArray
@@ -211,7 +205,12 @@ sub setSiteValues {
         # get and set site assigned values
         #
         my ($siteExtraValue,$default_site);
-        ($self->{'siteName'},$self->{"site"}{'cssDevel'},$self->{"site"}{'jsDevel'},$self->{'siteGUID'},$siteExtraValue,$default_site,$self->{'gatewayUserID'},$self->{'gatewayType'},$self->{'email'},$self->{"site"}{'homeGUID'}) = @{$self->runSQL(SQL=>"select name,css_devel,js_devel,guid,extra_value,default_site,gateway_user_id,gateway_type,email,home_guid from site where sid='".$self->safeSQL($self->{'siteId'})."'")};
+        ($self->{'languageArray'},$self->{'siteName'},$self->{"site"}{'cssDevel'},$self->{"site"}{'jsDevel'},$self->{'siteGUID'},$siteExtraValue,$default_site,$self->{'gatewayUserID'},$self->{'gatewayType'},$self->{'email'},$self->{"site"}{'homeGUID'}) = @{$self->runSQL(SQL=>"select language_array,name,css_devel,js_devel,guid,extra_value,default_site,gateway_user_id,gateway_type,email,home_guid from site where sid='".$self->safeSQL($self->{'siteId'})."'")};
+
+	#
+	# move the lang into the useable array
+	#
+	$self->languageArray(split(',',$self->{'languageArray'}));
 
 	#
 	# if for any reason homeGUID is blank, lets make a new one and its page

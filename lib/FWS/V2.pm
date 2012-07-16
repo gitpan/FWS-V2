@@ -16,11 +16,11 @@ FWS::V2 - Framework Sites version 2
 
 =head1 VERSION
 
-Version 0.007
+Version 0.008
 
 =cut
 
-our $VERSION = '0.007';
+our $VERSION = '0.008';
 
 
 =head1 SYNOPSIS
@@ -147,6 +147,10 @@ Web path for the same place filePath points to.  Example: /files
 =item * googleAppsKeyFile
 
 For google apps support for standard login modules this is required
+
+=item * hideEditModeHeaders
+
+Turn off all blue bar column headers for a site.  (Suppress the adding of elements to pages on a UI standpoint)
 
 =item * scriptTextSize
 
@@ -401,11 +405,8 @@ sub new {
         $self->{'securityHash'}->{'showSiteSettings'}{'title'}  = 'Site Settings Menu';
         $self->{'securityHash'}->{'showSiteSettings'}{'note'}   = 'Generic site settings and 3rd party connector configurations.';
 
-        $self->{'securityHash'}->{'showECommerce'}{'title'}     = 'Full eCommerce User';
-        $self->{'securityHash'}->{'showECommerce'}{'note'}      = 'View and manage eCommerce orders, oroduct matrix and subscription invoices.';
-
         $self->{'securityHash'}->{'showSiteUsers'}{'title'}     = 'User Account Access';
-        $self->{'securityHash'}->{'showSiteUsers'}{'note'}      = 'Access to create, delete and modify high level information for site accounts';
+        $self->{'securityHash'}->{'showSiteUsers'}{'note'}      = 'Access to create, delete and modify high level information for site accounts and groups.';
 
         #
         # set defaults
@@ -426,6 +427,16 @@ sub new {
         if ($self->{'secureDomain'} eq '')      { $self->{'secureDomain'} = 'http://'.$ENV{"SERVER_NAME"} }
 
         #
+        # Change the theme of the ace IDE for developer  mode
+        #
+        if ($self->{'aceTheme'} eq '')    	{ $self->{'aceTheme'} = 'idle_fingers' }
+
+	#
+        # The subdirectory of where tinyMCE is placed to make upgrading  and testing new versions easier
+        #
+        if ($self->{'tinyMCEPath'} eq '')       { $self->{'tinyMCEPath'} = 'tinymce-3.5.4' }
+
+        #
         # Sometimes sites need bigger thatn text blob, 'mediumtext' might be needed
         #
         if ($self->{'scriptTextSize'} eq '')    { $self->{'scriptTextSize'} = 'text' }
@@ -433,7 +444,12 @@ sub new {
         #
         # set the domains to the environment version if it was not set
         #
-        if ($self->{'sessionCookieName'} eq '')  { $self->{'sessionCookieName'} = 'fws_session' }
+        if ($self->{'sessionCookieName'} eq '') { $self->{'sessionCookieName'} = 'fws_session' }
+
+        #
+        # set mysql to default
+        #
+        if ($self->{'DBType'} eq '')            { $self->{'DBType'} = 'mysql' }
 
         #
         # set the domains to the environment version if it was not set
@@ -486,7 +502,7 @@ sub new {
 
 	@{$self->{'pluginCSSArray'}}		= ();
 	@{$self->{'pluginJSArray'}}		= ();
-
+	
         #
         # cache fields will be populated on setSiteValues
         # but in case we need a ph before then
@@ -514,346 +530,284 @@ sub new {
         #
         # core database schema
         #
-        @{$self->{'dataSchema'}} = (
-                "queue_history","guid"                  ,"char(36)"     ,"MUL"          ,"",
-                "queue_history","site_guid"             ,"char(36)"     ,"MUL"          ,"",
-                "queue_history","created_date"          ,"datetime"     ,""             ,"0000-00-00",
-                "queue_history","queue_guid"            ,"char(36)"     ,"MUL"          ,"",
-                "queue_history","profile_guid"          ,"char(36)"     ,"MUL"          ,"",
-                "queue_history","directory_guid"        ,"char(36)"     ,"MUL"          ,"",
-                "queue_history","type"                  ,"char(50)"     ,"MUL"          ,"",
-                "queue_history","queue_from"            ,"char(255)"    ,"MUL"          ,"",
-                "queue_history","from_name"             ,"char(255)"    ,""             ,"",
-                "queue_history","queue_to"              ,"char(255)"    ,"MUL"          ,"",
-                "queue_history","subject"               ,"char(255)"    ,""             ,"",
-                "queue_history","success"               ,"int(1)"       ,""             ,"0",
-                "queue_history","synced"                ,"int(1)"       ,""             ,"0",
-                "queue_history","body"                  ,"text"         ,""             ,"",
-                "queue_history","hash"                  ,"text"         ,""             ,"",
-                "queue_history","failure_code"          ,"char(255)"    ,""             ,"",
-                "queue_history","response"              ,"char(255)"    ,""             ,"",
-                "queue_history","sent_date"             ,"datetime"     ,""             ,"0000-00-00 00:00:00",
-                "queue_history","scheduled_date"        ,"datetime"     ,""             ,"0000-00-00 00:00:00",
+        $self->{"dataSchema"}{"queue_history"} = {
+                "guid"                          => { type => "char(36)" ,key => "MUL"         ,default => ""                  ,noSite => 1},
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "created_date"                  => { type => "datetime" ,key => ""            ,default => "0000-00-00"        },
+                "queue_guid"                    => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "profile_guid"                  => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "directory_guid"                => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "type"                          => { type => "char(50)" ,key => "MUL"         ,default => ""                  },
+                "queue_from"                    => { type => "char(255)",key => "MUL"         ,default => ""                  },
+                "from_name"                     => { type => "char(255)",key => ""            ,default => ""                  },
+                "queue_to"                      => { type => "char(255)",key => "MUL"         ,default => ""                  },
+                "subject"                       => { type => "char(255)",key => ""            ,default => ""                  },
+                "success"                       => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+                "synced"                        => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+                "body"                          => { type => "text"     ,key => ""            ,default => ""                  },
+                "hash"                          => { type => "text"     ,key => ""            ,default => ""                  },
+                "failure_code"                  => { type => "char(255)",key => ""            ,default => ""                  },
+                "response"                      => { type => "char(255)",key => ""            ,default => ""                  },
+                "sent_date"                     => { type => "datetime" ,key => ""            ,default => "0000-00-00 00:00:00"},
+                "scheduled_date"                => { type => "datetime" ,key => ""            ,default => "0000-00-00 00:00:00"},
+        };
 
+        $self->{"dataSchema"}{"queue"} = {
+                "guid"                          => { type => "char(36)" ,key => "MUL"         ,default => ""                  ,noSite => 1},
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "created_date"                  => { type => "datetime" ,key => ""            ,default => "0000-00-00"        },
+                "profile_guid"                  => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "directory_guid"                => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "type"                          => { type => "char(50)" ,key => "MUL"         ,default => ""                  },
+                "queue_from"                    => { type => "char(255)",key => "MUL"         ,default => ""                  ,AJAXGroup => 'showQueue'},
+                "queue_to"                      => { type => "char(255)",key => "MUL"         ,default => ""                  ,AJAXGroup => 'showQueue'},
+                "draft"                         => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+                "from_name"                     => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showQueue'},
+                "subject"                       => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showQueue'},
+                "mime_type"                     => { type => "char(100)",key => ""            ,default => ""                  ,AJAXGroup => 'showQueue'},
+                "transfer_encoding"             => { type => "char(100)",key => ""            ,default => ""                  },
+                "digital_assets"                => { type => "text"     ,key => ""            ,default => ""                  },
+                "body"                          => { type => "text"     ,key => ""            ,default => ""                  ,AJAXGroup => 'showQueue'},
+                "hash"                          => { type => "text"     ,key => ""            ,default => ""                  },
+                "scheduled_date"                => { type => "datetime" ,key => ""            ,default => "0000-00-00 00:00:00",AJAXGroup => 'showQueue'},
+        };
 
-                "queue","guid"                          ,"char(36)"     ,"MUL"          ,"",
-                "queue","site_guid"                     ,"char(36)"     ,"MUL"          ,"",
-                "queue","created_date"                  ,"datetime"     ,""             ,"0000-00-00",
-                "queue","profile_guid"                  ,"char(36)"     ,"MUL"          ,"",
-                "queue","directory_guid"                ,"char(36)"     ,"MUL"          ,"",
-                "queue","type"                          ,"char(50)"     ,"MUL"          ,"",
-                "queue","queue_from"                    ,"char(255)"    ,"MUL"          ,"",
-                "queue","queue_to"                      ,"char(255)"    ,"MUL"          ,"",
-                "queue","draft"                         ,"int(1)"       ,""             ,"0",
-                "queue","from_name"                     ,"char(255)"    ,""             ,"",
-                "queue","subject"                       ,"char(255)"    ,""             ,"",
-                "queue","mime_type"                     ,"char(100)"    ,""             ,"",
-                "queue","transfer_encoding"             ,"char(100)"    ,""             ,"",
-                "queue","digital_assets"                ,"text"         ,""             ,"",
-                "queue","body"                          ,"text"         ,""             ,"",
-                "queue","hash"                          ,"text"         ,""             ,"",
-                "queue","scheduled_date"                ,"datetime"     ,""             ,"0000-00-00 00:00:00",
+        $self->{"dataSchema"}{"events"} = {
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  ,noSite => 1},
+                "guid"                          => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "price"                         => { type => "double"   ,key => "MUL"         ,default => "0"                 },
+                "profile_guid"                  => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "name"                          => { type => "char(255)",key => "FULLTEXT"    ,default => ""                  },
+                "title"                         => { type => "char(255)",key => "FULLTEXT"    ,default => ""                  },
+                "city"                          => { type => "char(255)",key => "MUL"         ,default => ""                  },
+                "state"                         => { type => "char(255)",key => "MUL"         ,default => ""                  },
+                "address"                       => { type => "char(255)",key => ""            ,default => ""                  },
+                "address2"                      => { type => "char(255)",key => ""            ,default => ""                  },
+                "zip"                           => { type => "char(255)",key => ""            ,default => ""                  },
+                "location"                      => { type => "char(255)",key => ""            ,default => ""                  },
+                "website"                       => { type => "char(255)",key => ""            ,default => ""                  },
+                "phone"                         => { type => "char(255)",key => ""            ,default => ""                  },
+                "date_from"                     => { type => "datetime" ,key => "MUL"         ,default => "0000-00-00"        },
+                "date_to"                       => { type => "datetime" ,key => "MUL"         ,default => "0000-00-00"        },
+                "created_date"                  => { type => "datetime" ,key => ""            ,default => "0000-00-00"        },
+                "description"                   => { type => "text"     ,key => "FULLTEXT"    ,default => ""                  },
+                "latitude"                      => { type => "float"    ,key => "MUL"         ,default => "0"                 },
+                "longitude"                     => { type => "float"    ,key => "MUL"         ,default => "0"                 },
+                "directory_guid"                => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "extra_value"                   => { type => "text"     ,key => ""            ,default => ""                  ,AJAXGroup => 'showEvents'},
+        };
 
+        $self->{"dataSchema"}{"history"} = {
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  ,noSite => 1},
+                "created_date"                  => { type => "datetime" ,key => ""            ,default => "0000-00-00"        },
+                "guid"                          => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "type"                          => { type => "char(1)"  ,key => "MUL"         ,default => ""                  },
+                "name"                          => { type => "char(255)",key => "FULLTEXT"    ,default => ""                  },
+                "url"                           => { type => "char(255)",key => ""            ,default => ""                  },
+                "title"                         => { type => "char(255)",key => "FULLTEXT"    ,default => ""                  },
+                "latitude"                      => { type => "float"    ,key => "MUL"         ,default => "0"                 },
+                "longitude"                     => { type => "float"    ,key => "MUL"         ,default => "0"                 },
+                "hash"                          => { type => "text"     ,key => ""            ,default => ""                  },
+                "description"                   => { type => "text"     ,key => "FULLTEXT"    ,default => ""                  },
+                "referrer_guid"                 => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "directory_guid"                => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "profile_guid"                  => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+        };
 
-                "events","site_guid"                    ,"char(36)"     ,"MUL"          ,"",
-                "events","guid"                         ,"char(36)"     ,"MUL"          ,"",
-                "events","price"                        ,"double"       ,"MUL"          ,"0",
-                "events","profile_guid"                 ,"char(36)"     ,"MUL"          ,"",
-                "events","name"                         ,"char(255)"    ,"FULLTEXT"     ,"",
-                "events","title"                        ,"char(255)"    ,"FULLTEXT"     ,"",
-                "events","city"                         ,"char(255)"    ,"MUL"          ,"",
-                "events","state"                        ,"char(255)"    ,"MUL"          ,"",
-                "events","address"                      ,"char(255)"    ,""             ,"",
-                "events","address2"                     ,"char(255)"    ,""             ,"",
-                "events","zip"                          ,"char(255)"    ,""             ,"",
-                "events","location"                     ,"char(255)"    ,""             ,"",
-                "events","website"                      ,"char(255)"    ,""             ,"",
-                "events","phone"                        ,"char(255)"    ,""             ,"",
-                "events","date_from"                    ,"datetime"     ,"MUL"          ,"0000-00-00",
-                "events","date_to"                      ,"datetime"     ,"MUL"          ,"0000-00-00",
-                "events","created_date"                 ,"datetime"     ,""             ,"0000-00-00",
-                "events","description"                  ,"text"         ,"FULLTEXT"     ,"",
-                "events","latitude"                     ,"float"        ,"MUL"          ,"0",
-                "events","longitude"                    ,"float"        ,"MUL"          ,"0",
-                "events","directory_guid"               ,"char(36)"     ,"MUL"          ,"",
-                "events","extra_value"                  ,"text"         ,""             ,"",
+        $self->{"dataSchema"}{"topic"} = {
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  ,noSite => 1},
+                "guid"                          => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "created_date"                  => { type => "datetime" ,key => ""            ,default => "0000-00-00"        },
+                "name"                          => { type => "char(255)",key => "MUL"         ,default => ""                  },
+                "title"                         => { type => "char(255)",key => "MUL"         ,default => ""                  },
+                "tags"                          => { type => "char(255)",key => "MUL"         ,default => ""                  },
+                "description"                   => { type => "text"     ,key => "FULLTEXT"    ,default => ""                  },
+                "content"                       => { type => "text"     ,key => "FULLTEXT"    ,default => ""                  },
+                "content_1"                     => { type => "text"     ,key => "FULLTEXT"    ,default => ""                  },
+                "content_2"                     => { type => "text"     ,key => "FULLTEXT"    ,default => ""                  },
+                "fb_content"                    => { type => "text"     ,key => "FULLTEXT"    ,default => ""                  },
+                "twitter_content"               => { type => "text"     ,key => "FULLTEXT"    ,default => ""                  },
+                "directory_guid"                => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "active"                        => { type => "int(1)"   ,key => "MUL"         ,default => "0"                 },
+                "draft"                         => { type => "int(1)"   ,key => "MUL"         ,default => "0"                 },
+                "url"                           => { type => "char(255)",key => ""            ,default => ""                  },
+                "image_1"                       => { type => "char(255)",key => ""            ,default => ""                  },
+                "date_to"                       => { type => "date",    ,key => "MUL"         ,default => "0000-00-00"        },
+                "date_from"                     => { type => "date",    ,key => "MUL"         ,default => "0000-00-00"        },
+                "extra_value"                   => { type => "text"     ,key => ""            ,default => ""                  },
+        };
 
-                "history","site_guid"                   ,"char(36)"     ,"MUL"          ,"",
-                "history","created_date"                ,"datetime"     ,""             ,"0000-00-00",
-                "history","guid"                        ,"char(36)"     ,"MUL"          ,"",
-                "history","type"                        ,"char(1)"      ,"MUL"          ,"",
-                "history","name"                        ,"char(255)"    ,"FULLTEXT"     ,"",
-                "history","url"                         ,"char(255)"    ,""             ,"",
-                "history","title"                       ,"char(255)"    ,"FULLTEXT"     ,"",
-                "history","latitude"                    ,"float"        ,"MUL"          ,"0",
-                "history","longitude"                   ,"float"        ,"MUL"          ,"0",
-                "history","hash"                        ,"text"         ,""             ,"",
-                "history","description"                 ,"text"         ,"FULLTEXT"     ,"",
-                "history","referrer_guid"               ,"char(36)"     ,"MUL"          ,"",
-                "history","directory_guid"              ,"char(36)"     ,"MUL"          ,"",
-                "history","profile_guid"                ,"char(36)"     ,"MUL"          ,"",
+        $self->{"dataSchema"}{"auto"} = {
+                "make"                          => { type => "char(255)",key => "MUL"         ,default => ""                  },
+                "model"                         => { type => "char(255)",key => "MUL"         ,default => ""                  },
+                "year"                          => { type => "char(4)"  ,key => "MUL"         ,default => ""                  },
+        };
 
-                "deal","site_guid"                      ,"char(36)"     ,"MUL"          ,"",
-                "deal","created_date"                   ,"datetime"     ,""             ,"0000-00-00",
-                "deal","guid"                           ,"char(36)"     ,"MUL"          ,"",
-                "deal","active"                         ,"int(1)"       ,"MUL"          ,"0",
-                "deal","type"                           ,"char(1)"      ,"MUL"          ,"",
-                "deal","name"                           ,"char(255)"    ,"FULLTEXT"     ,"",
-                "deal","latitude"                       ,"float"        ,"MUL"          ,"0",
-                "deal","longitude"                      ,"float"        ,"MUL"          ,"0",
-                "deal","price"                          ,"double"       ,"MUL"          ,"0",
-                "deal","get_amount"                     ,"double"       ,"MUL"          ,"0",
-                "deal","spend_amount"                   ,"double"       ,"MUL"          ,"0",
-                "deal","qty_sold"                       ,"int(11)"      ,""             ,"0",
-                "deal","qty_available"                  ,"int(11)"      ,""             ,"0",
-                "deal","date_from"                      ,"datetime"     ,"MUL"          ,"0000-00-00",
-                "deal","date_to"                        ,"datetime"     ,"MUL"          ,"0000-00-00",
-                "deal","date_use_by"                    ,"datetime"     ,"MUL"          ,"0000-00-00",
-                "deal","description"                    ,"text"         ,"FULLTEXT"     ,"",
-                "deal","fine_print"                     ,"text"         ,"FULLTEXT"     ,"",
-                "deal","image_1"                        ,"char(255)"    ,""             ,"",
-                "deal","directory_guid"                 ,"char(36)"     ,"MUL"          ,"",
-                "deal","profile_guid"                   ,"char(36)"     ,"MUL"          ,"",
-                "deal","extra_value"                    ,"text"         ,""             ,"",
+        $self->{"dataSchema"}{"country"} = {
+                "name"                          => { type => "char(255)",key => ""            ,default => ""                  },
+                "twoCharacter"                  => { type => "char(2)"  ,key => ""            ,default => ""                  },
+                "threeCharacter"                => { type => "char(3)"  ,key => ""            ,default => ""                  },
+        };
 
-                "directory","site_guid"                 ,"char(36)"     ,"MUL"          ,"",
-                "directory","guid"                      ,"char(36)"     ,"MUL"          ,"",
-                "directory","pin"                       ,"char(6)"      ,"MUL"          ,"",
-                "directory","created_date"              ,"datetime"     ,""             ,"0000-00-00",
-                "directory","active"                    ,"int(1)"       ,"MUL"          ,"0",
-                "directory","url"                       ,"char(255)"    ,"MUL"          ,"",
-                "directory","name"                      ,"char(255)"    ,"FULLTEXT"     ,"",
-                "directory","video_1"                   ,"char(255)"    ,""             ,"",
-                "directory","video_2"                   ,"char(255)"    ,""             ,"",
-                "directory","image_1"                   ,"char(255)"    ,""             ,"",
-                "directory","image_2"                   ,"char(255)"    ,""             ,"",
-                "directory","image_3"                   ,"char(255)"    ,""             ,"",
-                "directory","image_4"                   ,"char(255)"    ,""             ,"",
-                "directory","image_5"                   ,"char(255)"    ,""             ,"",
-                "directory","category_1"                ,"char(255)"    ,"MUL"          ,"",
-                "directory","category_2"                ,"char(255)"    ,"MUL"          ,"",
-                "directory","category_3"                ,"char(255)"    ,"MUL"          ,"",
-                "directory","category_4"                ,"char(255)"    ,"MUL"          ,"",
-                "directory","category_5"                ,"char(255)"    ,"MUL"          ,"",
-                "directory","category_6"                ,"char(255)"    ,"MUL"          ,"",
-                "directory","address"                   ,"char(255)"    ,""             ,"",
-                "directory","full_address"              ,"char(255)"    ,""             ,"",
-                "directory","coupon_array"              ,"text"         ,""             ,"",
-                "directory","deal_array"                ,"text"         ,""             ,"",
-                "directory","address2"                  ,"char(255)"    ,""             ,"",
-                "directory","phone"                     ,"char(20)"     ,""             ,"",
-                "directory","website"                   ,"char(255)"    ,""             ,"",
-                "directory","cost_rating"               ,"float"        ,""             ,"0",
-                "directory","cost_rating_count"         ,"int(11)"      ,""             ,"0",
-                "directory","rating"                    ,"float"        ,""             ,"0",
-                "directory","rating_count"              ,"int(11)"      ,""             ,"0",
-                "directory","city"                      ,"char(255)"    ,"MUL"          ,"",
-                "directory","state"                     ,"char(255)"    ,"MUL"          ,"",
-                "directory","zip"                       ,"char(255)"    ,"MUL"          ,"",
-                "directory","country"                   ,"char(255)"    ,""             ,"",
-                "directory","facebook_id"               ,"char(255)"    ,""             ,"",
-                "directory","twitter_id"                ,"char(255)"    ,""             ,"",
-                "directory","email"                     ,"char(255)"    ,""             ,"",
-                "directory","description"               ,"text"         ,"FULLTEXT"     ,"",
-                "directory","latitude"                  ,"float"        ,"MUL"          ,"0",
-                "directory","longitude"                 ,"float"        ,"MUL"          ,"0",
-                "directory","level"                     ,"int(3)"       ,"MUL"          ,"0",
-                "directory","charity"                   ,"int(1)"       ,"MUL"          ,"0",
-                "directory","claimed"                   ,"int(1)"       ,"MUL"          ,"0",
-                "directory","claimed_profile_guid"      ,"char(36)"     ,"MUL"          ,"",
-                "directory","claimed_validator_guid"    ,"char(36)"     ,"MUL"          ,"",
-                "directory","extra_value"               ,"text"         ,""             ,"",
+        $self->{"dataSchema"}{"zipcode"} = {
+                "zipCode"                       => { type => "char(7)"  ,key => "MUL"         ,default => ""                  },
+                "zipType"                       => { type => "char(1)"  ,key => ""            ,default => ""                  },
+                "stateAbbr"                     => { type => "char(2)"  ,key => ""            ,default => ""                  },
+                "city"                          => { type => "char(255)",key => "FULLTEXT"    ,default => ""                  },
+                "areaCode"                      => { type => "char(3)"  ,key => ""            ,default => ""                  },
+                "timeZone"                      => { type => "char(12)" ,key => ""            ,default => ""                  },
+                "UTC"                           => { type => "int(10)"  ,key => ""            ,default => "0"                 },
+                "DST"                           => { type => "char(1)"  ,key => ""            ,default => ""                  },
+                "latitude"                      => { type => "float"    ,key => "MUL"         ,default => "0"                 },
+                "longitude"                     => { type => "float"    ,key => "MUL"         ,default => "0"                 },
+                "loc_id"                        => { type => "int(11)"  ,key => "MUL"         ,default => "0"                 },
+        };
 
-                "topic","site_guid"                     ,"char(36)"     ,"MUL"          ,"",
-                "topic","guid"                          ,"char(36)"     ,"MUL"          ,"",
-                "topic","created_date"                  ,"datetime"     ,""             ,"0000-00-00",
-                "topic","name"                          ,"char(255)"    ,"MUL"          ,"",
-                "topic","title"                         ,"char(255)"    ,"MUL"          ,"",
-                "topic","tags"                          ,"char(255)"    ,"MUL"          ,"",
-                "topic","description"                   ,"text"         ,"FULLTEXT"     ,"",
-                "topic","content"                       ,"text"         ,"FULLTEXT"     ,"",
-                "topic","content_1"                     ,"text"         ,"FULLTEXT"     ,"",
-                "topic","content_2"                     ,"text"         ,"FULLTEXT"     ,"",
-                "topic","fb_content"                    ,"text"         ,"FULLTEXT"     ,"",
-                "topic","twitter_content"               ,"text"         ,"FULLTEXT"     ,"",
-                "topic","directory_guid"                ,"char(36)"     ,"MUL"          ,"",
-                "topic","active"                        ,"int(1)"       ,"MUL"          ,"0",
-                "topic","draft"                         ,"int(1)"       ,"MUL"          ,"0",
-                "topic","url"                           ,"char(255)"    ,""             ,"",
-                "topic","image_1"                       ,"char(255)"    ,""             ,"",
-                "topic","date_to"                       ,"date",        ,"MUL"          ,"0000-00-00",
-                "topic","date_from"                     ,"date",        ,"MUL"          ,"0000-00-00",
-                "topic","extra_value"                   ,"text"         ,""             ,"",
+        $self->{"dataSchema"}{"geo_block"} = {
+                "start_ip"                      => { type => "int(11)"  ,key => "MUL"         ,default => "0"                 },
+                "end_ip"                        => { type => "int(11)"  ,key => "MUL"         ,default => "0"                 },
+                "loc_id"                        => { type => "int(11)"  ,key => "MUL"         ,default => "0"                 },
+        };
 
-                "auto","make"                           ,"char(255)"    ,"MUL"          ,"",
-                "auto","model"                          ,"char(255)"    ,"MUL"          ,"",
-                "auto","year"                           ,"char(4)"      ,"MUL"          ,"",
+        $self->{"dataSchema"}{"templates"} = {
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  ,noSite => 1},
+                "guid"                          => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "title"                         => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showDesign'},
+                "default_template"              => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+                "template_devel"                => { type => "text"     ,key => ""            ,default => ""                  },
+                "css_devel"                     => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+                "js_devel"                      => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+        };
 
-                "country","name"                        ,"char(255)"    ,""             ,"",
-                "country","twoCharacter"                ,"char(2)"      ,""             ,"",
-                "country","threeCharacter"              ,"char(3)"      ,""             ,"",
+        $self->{"dataSchema"}{"data_cache"} = {
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "guid"                          => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "name"                          => { type => "char(255)",key => "FULLTEXT"    ,default => ""                  },
+                "title"                         => { type => "char(255)",key => "FULLTEXT"    ,default => ""                  },
+                "pageIdOfElement"               => { type => "char(36)" ,key => ""            ,default => ""                  },
+                "pageDescription"               => { type => "text"     ,key => "FULLTEXT"    ,default => ""                  },
+        };
 
-                "zipcode","zipCode"                     ,"char(7)"      ,"MUL"          ,"",
-                "zipcode","zipType"                     ,"char(1)"      ,""             ,"",
-                "zipcode","stateAbbr"                   ,"char(2)"      ,""             ,"",
-                "zipcode","city"                        ,"char(255)"    ,"FULLTEXT"     ,"",
-                "zipcode","areaCode"                    ,"char(3)"      ,""             ,"",
-                "zipcode","timeZone"                    ,"char(12)"     ,""             ,"",
-                "zipcode","UTC"                         ,"int(10)"      ,""             ,"0",
-                "zipcode","DST"                         ,"char(1)"      ,""             ,"",
-                "zipcode","latitude"                    ,"float"        ,"MUL"          ,"0",
-                "zipcode","longitude"                   ,"float"        ,"MUL"          ,"0",
-                "zipcode","loc_id"                      ,"int(11)"      ,"MUL"          ,"0",
+        $self->{"dataSchema"}{"data"} = {
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "guid"                          => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "name"                          => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+                "title"                         => { type => "char(255)",key => "MUL"         ,default => ""                  ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+                "nav_name"                      => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+                "active"                        => { type => "int(1)"   ,key => "MUL"         ,default => "0"                 ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+                "lang"                          => { type => "char(2)"  ,key => "MUL"         ,default => ""                  ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+                "disable_title"                 => { type => "int(1)"   ,key => "MUL"         ,default => "0"                 ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+                "element_type"                  => { type => "char(50)" ,key => "MUL"         ,default => ""                  },
+                "groups_guid"                   => { type => "char(36)" ,key => ""            ,default => ""                  ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+                "created_date"                  => { type => "datetime" ,key => ""            ,default => "0000-00-00"        },
+                "disable_edit_mode"             => { type => "int(1)"   ,key => ""            ,default => "0"                 ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+                "default_element"               => { type => "int(2)"   ,key => ""            ,default => "0"                 ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+                "show_login"                    => { type => "int(1)"   ,key => ""            ,default => "1"                 ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+ 		"show_mobile"                   => { type => "int(2)"   ,key => ""            ,default => "0"                 ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+                "show_resubscribe"              => { type => "int(1)"   ,key => ""            ,default => "1"                 ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+                "friendly_url"                  => { type => "char(255)",key => "MUL"         ,default => ""                  ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+		"page_friendly_url"             => { type => "char(255)",key => "MUL"         ,default => ""                  ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+                "extra_value"                   => { type => "text"     ,key => ""            ,default => ""                  ,AJAXGroup => 'showDeveloper|showContent|showDesign'},
+        };
 
-                "geo_block","start_ip"                  ,"int(11)"      ,"MUL"          ,"0",
-                "geo_block","end_ip"                    ,"int(11)"      ,"MUL"          ,"0",
-                "geo_block","loc_id"                    ,"int(11)"      ,"MUL"          ,"0",
+        $self->{"dataSchema"}{"admin_user"} = {
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  ,noSite => 1},
+                "guid"                          => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "user_id"                       => { type => "char(50)" ,key => "MUL"         ,default => ""                  },
+                "name"                          => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'isAdmin'},
+                "email"                         => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'isAdmin'},
+                "admin_user_password"           => { type => "char(50)" ,key => "MUL"         ,default => ""                  ,cryptPassword => 1},
+                "active"                        => { type => "int(1)"   ,key => "MUL"         ,default => "1"                 },
+                "extra_value"                   => { type => "text"     ,key => ""            ,default => ""                  ,AJAXGroup => 'isAdmin'},
+        };
 
-                "templates","site_guid"                 ,"char(36)"     ,"MUL"          ,"",
-                "templates","guid"                      ,"char(36)"     ,"MUL"          ,"",
-                "templates","title"                     ,"char(255)"    ,""             ,"",
-                "templates","default_template"          ,"int(1)"       ,""             ,"0",
-                "templates","template_live"             ,"text"         ,""             ,"",
-                "templates","template_devel"            ,"text"         ,""             ,"",
-                "templates","css_live"                  ,"int(1)"       ,""             ,"0",
-                "templates","css_devel"                 ,"int(1)"       ,""             ,"0",
-                "templates","js_live"                   ,"int(1)"       ,""             ,"0",
-                "templates","js_devel"                  ,"int(1)"       ,""             ,"0",
+        $self->{"dataSchema"}{"profile_groups_xref"} = {
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "profile_guid"                  => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "groups_guid"                   => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+        };
 
-                "data_cache","site_guid"                ,"char(36)"     ,"MUL"          ,"",
-                "data_cache","guid"                     ,"char(36)"     ,"MUL"          ,"",
-                "data_cache","name"                     ,"char(255)"    ,"FULLTEXT"     ,"",
-                "data_cache","title"                    ,"char(255)"    ,"FULLTEXT"     ,"",
-                "data_cache","pageIdOfElement"          ,"char(36)"     ,""             ,"",
-                "data_cache","pageDescription"          ,"text"         ,"FULLTEXT"     ,"",
+        $self->{"dataSchema"}{"profile"} = {
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  ,noSite => 1},
+                "guid"                          => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "pin"                           => { type => "char(6)"  ,key => "MUL"         ,default => ""                  },
+                "profile_password"              => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showSiteUsers',cryptPassword => 1},
+                "fb_access_token"               => { type => "char(255)",key => ""            ,default => ""                  },
+                "fb_id"                         => { type => "char(255)",key => ""            ,default => ""                  },
+                "email"                         => { type => "char(255)",key => "MUL"         ,default => ""                  },
+                "name"                          => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showSiteUsers'},
+                "active"                        => { type => "int(1)"   ,key => ""            ,default => "1"                 ,AJAXGroup => 'showSiteUsers'},
+                "google_id"                     => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showSiteUsers'},
+                "extra_value"                   => { type => "text"     ,key => ""            ,default => ""                  ,AJAXGroup => 'showSiteUsers'},
+        };
 
-                "data","site_guid"                      ,"char(36)"     ,"MUL"          ,"",
-                "data","guid"                           ,"char(36)"     ,"MUL"          ,"",
-                "data","name"                           ,"char(255)"    ,""             ,"",
-                "data","title"                          ,"char(255)"    ,""             ,"",
-                "data","nav_name"                       ,"char(255)"    ,""             ,"",
-                "data","active"                         ,"int(1)"       ,"MUL"          ,"0",
-                "data","lang"                           ,"char(2)"      ,"MUL"          ,"",
-                "data","disable_title"                  ,"int(1)"       ,"MUL"          ,"0",
-                "data","element_type"                   ,"char(50)"     ,"MUL"          ,"",
-                "data","groups_guid"                    ,"char(36)"     ,""             ,"",
-                "data","created_date"                   ,"datetime"     ,""             ,"0000-00-00",
-                "data","disable_edit_mode"              ,"int(1)"       ,""             ,"0",
-                "data","default_element"                ,"int(2)"       ,""             ,"0",
-                "data","show_login"                     ,"int(1)"       ,""             ,"1",
-                "data","show_resubscribe"               ,"int(1)"       ,""             ,"1",
-                "data","friendly_url"                   ,"char(255)"    ,""             ,"",
-                "data","extra_value"                    ,"text"         ,""             ,"",
+        $self->{"dataSchema"}{"fws_sessions"} = {
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "ip"                            => { type => "char(50)" ,key => "MUL"         ,default => ""                  },
+		"fws_lang"                      => { type => "char(2)"  ,key => ""            ,default => ""                  },
+                "b"                             => { type => "char(255)",key => ""            ,default => ""                  },
+                "l"                             => { type => "char(50)" ,key => ""            ,default => ""                  },
+                "bs"                            => { type => "char(50)" ,key => ""            ,default => ""                  },
+                "e"                             => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+                "s"                             => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+                "a"                             => { type => "char(50)" ,key => ""            ,default => ""                  },
+                "a_exp"                         => { type => "int(11)"  ,key => ""            ,default => "0"                 },
+                "extra"                         => { type => "text"     ,key => ""            ,default => ""                  },
+                "created"                       => { type => "timestamp",key => ""            ,default => "CURRENT_TIMESTAMP" },
+        };
 
-                "admin_user","site_guid"                ,"char(36)"     ,"MUL"          ,"",
-                "admin_user","guid"                     ,"char(36)"     ,"MUL"          ,"",
-                "admin_user","user_id"                  ,"char(50)"     ,"MUL"          ,"",
-                "admin_user","name"                     ,"char(255)"    ,""             ,"",
-                "admin_user","email"                    ,"char(255)"    ,""             ,"",
-                "admin_user","admin_user_password"      ,"char(50)"     ,"MUL"          ,"",
-                "admin_user","active"                   ,"int(1)"       ,"MUL"          ,"1",
-                "admin_user","extra_value"              ,"text"         ,""             ,"",
+        $self->{"dataSchema"}{"guid_xref"} = {
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "child"                         => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "parent"                        => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "ord"                           => { type => "int(11)"  ,key => ""            ,default => "0"                 },
+                "layout"                        => { type => "char(50)" ,key => ""            ,default => ""                  },
+        };
 
-                "profile_groups_xref","site_guid"       ,"char(36)"     ,"MUL"          ,"",
-                "profile_groups_xref","profile_guid"    ,"char(36)"     ,"MUL"          ,"",
-                "profile_groups_xref","groups_guid"     ,"char(36)"     ,"MUL"          ,"",
+        $self->{"dataSchema"}{"element"} = {
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "guid"                          => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "type"                          => { type => "char(50)" ,key => "MUL"         ,default => ""                  ,AJAXGroup => 'showDeveloper'},
+                "parent"                        => { type => "char(36)" ,key => "MUL"         ,default => ""                  ,AJAXGroup => 'showDeveloper'},
+                "title"                         => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showDeveloper'},
+                "tags"                          => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showDeveloper'},
+                "class_prefix"                  => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showDeveloper'},
+                "admin_group"                   => { type => "char(50)" ,key => ""            ,default => ""                  ,AJAXGroup => 'showDeveloper'},
+                "ord"                           => { type => "int(11)"  ,key => ""            ,default => "0"                 ,AJAXGroup => 'showDeveloper'},
+                "public"                        => { type => "int(1)"   ,key => ""            ,default => "0"                 ,AJAXGroup => 'showDeveloper'},
+                "css_devel"                     => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+                "js_devel"                      => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+                "script_devel"                  => { type => $self->{'scriptTextSize'},key=>"",default => ""                  },
+                "schema_devel"                  => { type => "text"     ,key => ""            ,default => ""                  },
+                "active"                        => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+                "checkedout"                    => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+                "root_element"                  => { type => "int(1)"   ,key => ""            ,default => "0"                 ,AJAXGroup => 'showDeveloper'},
+        };
 
-                "profile","site_guid"                   ,"char(36)"     ,"MUL"          ,"",
-                "profile","guid"                        ,"char(36)"     ,"MUL"          ,"",
-                "profile","pin"                         ,"char(6)"      ,"MUL"          ,"",
-                "profile","profile_password"            ,"char(255)"    ,""             ,"",
-                "profile","fb_access_token"             ,"char(255)"    ,""             ,"",
-                "profile","fb_id"                       ,"char(255)"    ,""             ,"",
-                "profile","email"                       ,"char(255)"    ,"MUL"          ,"",
-                "profile","name"                        ,"char(255)"    ,""             ,"",
-                "profile","active"                      ,"int(1)"       ,""             ,"1",
-                "profile","google_id"                   ,"char(255)"    ,""             ,"",
-                "profile","extra_value"                 ,"text"         ,""             ,"",
+        $self->{"dataSchema"}{"groups"} = {
+                "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  ,noSite => 1},
+                "guid"                          => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "name"                          => { type => "char(50)" ,key => ""            ,default => ""                  ,AJAXGroup => 'showSiteUsers'},
+                "description"                   => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showSiteUsers'},
+        };
 
-                "cart","site_guid"                      ,"char(36)"     ,"MUL"          ,"",
-                "cart","guid"                           ,"char(36)"     ,"MUL"          ,"",
-                "cart","name"                           ,"char(255)"    ,""             ,"",
-                "cart","qty"                            ,"int(11)"      ,""             ,"0",
-                "cart","data_guid"                      ,"char(36)"     ,""             ,"",
-                "cart","session"                        ,"char(32)"     ,""             ,"",
-                "cart","created_date"                   ,"datetime"     ,""             ,"0000-00-00",
-                "cart","price"                          ,"double"       ,""             ,"0",
-                "cart","sku"                            ,"char(50)"     ,""               ,"",
-                "cart","extra_value"                    ,"text"         ,""             ,"",
-
-                "fws_sessions","site_guid"              ,"char(36)"     ,"MUL"          ,"",
-                "fws_sessions","ip"                     ,"char(50)"     ,"MUL"          ,"",
-                "fws_sessions","b"                      ,"char(255)"    ,""             ,"",
-                "fws_sessions","l"                      ,"char(50)"     ,""             ,"",
-                "fws_sessions","bs"                     ,"char(50)"     ,""             ,"",
-                "fws_sessions","e"                      ,"int(1)"       ,""             ,"0",
-                "fws_sessions","s"                      ,"int(1)"       ,""             ,"0",
-                "fws_sessions","a"                      ,"char(50)"     ,""             ,"",
-                "fws_sessions","a_exp"                  ,"int(11)"      ,""             ,"0",
-                "fws_sessions","extra"                  ,"text"         ,""             ,"",
-                "fws_sessions","created"                ,"timestamp"    ,""             ,"CURRENT_TIMESTAMP",
-
-                "guid_xref","site_guid"                 ,"char(36)"     ,"MUL"          ,"",
-                "guid_xref","child"                     ,"char(36)"     ,"MUL"          ,"",
-                "guid_xref","parent"                    ,"char(36)"     ,"MUL"          ,"",
-                "guid_xref","ord"                       ,"int(11)"      ,""             ,"0",
-                "guid_xref","layout"                    ,"char(50)"     ,""             ,"",
-
-                "element","site_guid"                   ,"char(36)"     ,"MUL"          ,"",
-                "element","guid"                        ,"char(36)"     ,"MUL"          ,"",
-                "element","type"                        ,"char(50)"     ,"MUL"          ,"",
-                "element","parent"                      ,"char(36)"     ,"MUL"          ,"",
-                "element","title"                       ,"char(255)"    ,""             ,"",
-                "element","tags"                        ,"char(255)"    ,""             ,"",
-                "element","class_prefix"                ,"char(255)"    ,""             ,"",
-                "element","admin_group"                 ,"char(50)"     ,""             ,"",
-                "element","ord"                         ,"int(11)"      ,""             ,"0",
-                "element","public"                      ,"int(1)"       ,""             ,"0",
-                "element","css_live"                    ,"int(1)"       ,""             ,"0",
-                "element","js_live"                     ,"int(1)"       ,""             ,"0",
-                "element","css_devel"                   ,"int(1)"       ,""             ,"0",
-                "element","js_devel"                    ,"int(1)"       ,""             ,"0",
-                "element","active"                      ,"int(1)"       ,""             ,"0",
-                "element","checkedout"                  ,"int(1)"       ,""             ,"0",
-                "element","root_element"                ,"int(1)"       ,""             ,"0",
-                "element","script_devel"                ,$self->{'scriptTextSize'},""   ,"",
-                "element","script_live"                 ,$self->{'scriptTextSize'},""   ,"",
-                "element","schema_devel"                ,'text',        ""              ,"",
-                "element","schema_live"                 ,'text',        ""              ,"",
-
-                "groups","site_guid"                    ,"char(36)"     ,"MUL"          ,"",
-                "groups","guid"                         ,"char(36)"     ,"MUL"          ,"",
-                "groups","name"                         ,"char(50)"     ,""             ,"",
-                "groups","description"                  ,"char(255)"    ,""             ,"",
-
-                "site","site_guid"                      ,"char(36)"     ,""             ,"",
-                "site","guid"                           ,"char(36)"     ,"MUL"          ,"",
-                "site","email"                          ,"char(255)"    ,""             ,"",
-                "site","name"                           ,"char(255)"    ,""             ,"",
-                "site","sid"                            ,"char(50)"     ,"MUL"          ,"",
-                "site","created_date"                   ,"datetime"     ,""             ,"0000-00-00",
-                "site","gateway_type"                   ,"char(10)"     ,""             ,"",
-                "site","gateway_user_id"                ,"char(150)"    ,""             ,"",
-                "site","gateway_password"               ,"char(150)"    ,""             ,"",
-                "site","home_guid"                      ,"char(36)"     ,""             ,"",
-                "site","js_devel"                       ,"int(1)"       ,""             ,"0",
-                "site","js_live"                        ,"int(1)"       ,""             ,"0",
-                "site","css_devel"                      ,"int(1)"       ,""             ,"0",
-                "site","css_live"                       ,"int(1)"       ,""             ,"0",
-                "site","default_site"                   ,"int(1)"       ,""             ,"0",
-                "site","extra_value"                    ,"text"         ,""             ,"",
-
-                "coupon","site_guid"                    ,"char(36)"     ,"MUL"          ,"",
-                "coupon","created_date"                 ,"datetime"     ,""             ,"0000-00-00",
-                "coupon","name"                         ,"char(255)"    ,"MUL"          ,"",
-                "coupon","date_to"                      ,"date",        ,"MUL"          ,"0000-00-00",
-                "coupon","date_from"                    ,"date",        ,"MUL"          ,"0000-00-00",
-                "coupon","persistent"                   ,"int(1)",      ,"MUL"          ,"0",
-                "coupon","type"                         ,"char(1)"      ,"MUL"          ,"f",
-                "coupon","amount"                       ,"double"       ,""             ,"0",
-                "coupon","code"                         ,"char(255)"    ,"MUL"          ,"",
-                "coupon","guid"                         ,"char(36)"     ,"MUL"          ,"",
-		);
+        $self->{"dataSchema"}{"site"} = {
+                "site_guid"                     => { type => "char(36)" ,key => ""            ,default => ""                  ,noSite => 1},
+                "guid"                          => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
+                "email"                         => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showSiteSettings'},
+                "name"                          => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showSiteSettings'},
+                "language_array"                => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showSiteSettings'},
+                "sid"                           => { type => "char(50)" ,key => "MUL"         ,default => ""                  },
+                "created_date"                  => { type => "datetime" ,key => ""            ,default => "0000-00-00"        },
+                "gateway_type"                  => { type => "char(10)" ,key => ""            ,default => ""                  ,AJAXGroup => 'showSiteSettings'},
+                "gateway_user_id"               => { type => "char(150)",key => ""            ,default => ""                  ,AJAXGroup => 'showSiteSettings'},
+                "gateway_password"              => { type => "char(150)",key => ""            ,default => ""                  ,AJAXGroup => 'showSiteSettings', encrypt=> 1},
+                "home_guid"                     => { type => "char(36)" ,key => ""            ,default => ""                  },
+                "js_devel"                      => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+                "css_devel"                     => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+                "default_site"                  => { type => "int(1)"   ,key => ""            ,default => "0"                 },
+                "extra_value"                   => { type => "text"     ,key => ""            ,default => ""                  ,AJAXGroup => 'showSiteSettings'},
+        };
 
         return $self;
 }
@@ -876,6 +830,15 @@ If server wide plugins are being added for this instance they will be under the 
 	# register some plugin added via the FWS 2.1 Plugin manager
         #
 	$fws->registerPlugin('somePlugin');
+
+Additionally if you want to check if a plugin is active inside of element or scripts you can use the following conditional:
+
+	#
+	# check to see if ECommerce is loaded and active
+	#
+	if ($fws->{plugins}->{'ECommerce'} eq '1') { 	print "ECommerce is installed!\n" }
+	else { 						print "No ECommerce for you!\n" }
+
 
 =cut
 

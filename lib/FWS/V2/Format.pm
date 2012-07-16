@@ -9,11 +9,11 @@ FWS::V2::Format - Framework Sites version 2 text and html formatting
 
 =head1 VERSION
 
-Version 0.003
+Version 0.004
 
 =cut
 
-our $VERSION = '0.003';
+our $VERSION = '0.004';
 
 =head1 SYNOPSIS
 
@@ -57,6 +57,83 @@ sub createGUID {
 
         use Digest::SHA1 qw(sha1);
         return $guid . join('', unpack('H8 H4 H4 H4 H12', sha1( shift().shift().time().rand().$<.$$)));
+}
+
+=head2 activeToggleIcon
+
+Create a on off admin lightbulb for an item that will work if you are logged in as an edit mode editor role.  Pass a data hash, and append ajaxUpdateTable if it is not updating the standard data table.
+
+=cut
+
+sub activeToggleIcon {
+        my ($self,%paramHash) = @_;
+
+	my $table = 'data';
+	if ($paramHash{'ajaxUpdateTable'} ne '') { $table = $paramHash{'ajaxUpdateTable'} }
+
+        if ($paramHash{'active'} ne '1') {
+                return $self->FWSIcon(    icon    => "lightbulb_off_16.png",
+                                          onClick =>      "var currentState = 1; if (this.src.substr(this.src.length-9,2) == 'on')".
+                                                          "{this.src='".$self->{'fileFWSPath'}.
+                                                          "/icons/lightbulb_off_16.png'; currentState = 0; } else { this.src='".$self->{'fileFWSPath'}.
+                                                          "/icons/lightbulb_on_16.png';};\$('<div></div>').FWSAjax({queryString:'".
+                                                          "&value='+currentState+'&guid=".$paramHash{'guid'}.
+                                                          "&table=".$table."&field=active&pageAction=AJAXUpdate&returnStatusNote=1',showLoading:false});",
+                                          title   => "Active Toggle",
+                                          alt     => "Active Toggle",
+                                          style   => $paramHash{'style'},
+                                          width   => "16");
+        }
+        else {
+                return $self->FWSIcon(    icon    => "lightbulb_on_16.png",
+                                          onClick =>      "var currentState = 1; if (this.src.substr(this.src.length-9,2) == 'on')".
+                                                          "{this.src='".$self->{'fileFWSPath'}.
+                                                          "/icons/lightbulb_off_16.png'; currentState = 0; } else { this.src='".$self->{'fileFWSPath'}.
+                                                          "/icons/lightbulb_on_16.png';};\$('<div></div>').FWSAjax({queryString:'".
+                                                          "&value='+currentState+'&guid=".$paramHash{'guid'}.
+                                                          "&table=".$table."&field=active&pageAction=AJAXUpdate&returnStatusNote=1',showLoading:false});",
+                                          style   => $paramHash{'style'},
+                                          title   => "Active Toggle",
+                                          alt     => "Active Toggle",
+                                          width   => "16");
+        }
+}
+
+=head2 applyLanguage
+
+Apply the langague to a hash, so it will return as if the current sessions language is returned as the default keys.
+
+        #
+        # retrieve a guid to use with a new record
+        #
+        %dataHash = $fws->applyLanguage(%dataHash);
+
+=cut
+
+
+sub applyLanguage {
+        my ($self,%langHash) =@_;
+
+	#
+	# init the return hash
+	#
+	my %returnHash;
+
+	#
+	# go though each one
+	#	
+	foreach my $key (keys %langHash) {
+
+		#
+		# if it doesn't eend with a language notation, then run the field
+		#
+		if ($key !~ /_\w\w$/ && $key !~ /_id/i) { $returnHash{$key} = $self->field($key,%langHash) }
+		else  { $returnHash{$key} = $langHash{$key} }
+	}
+	#
+	# return our hash we created
+	#
+	return %returnHash;
 }
 
 =head2 createPin
@@ -144,6 +221,8 @@ By passing monthMod or dayMod you can adjust the month forward or backwards by t
 	#
 	my $threeMonths = $fws->dateTime(format=>'date',monthMod=>3);
 
+Multilingual support: French date formats will be used  for 'fancyDate' and 'date' if the language() is set to FR.
+
 Possible Parameters:
 
 =over 4
@@ -164,7 +243,7 @@ modify the current month ahead or behind.  (Note: If your current day is 31st, a
 
 modify the current day ahead or behind.
 
-=item * dateSeperator
+=item * dateSeparator
 
 This will default to '-', but can be changed to anything.   (Note: Do not use this if you are returing SQLTime format)
 
@@ -225,6 +304,18 @@ Standard epoch number
 =item * yearFirstDate
 
 yyyy-mm-dd
+
+=item * year
+
+yyyy
+
+=item * month
+
+mm
+
+=item * day
+
+dd
 
 =back
 
@@ -352,19 +443,38 @@ sub dateTime {
         if ($format =~ /^cookie$/i) {
                 my @dayName = qw(Sun Mon Tue Wed Thu Fri Sat);
                 my @monthName = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
-                $showDateTime = $dayName[$wday].", ".$monthDay.$dateSeparator.$monthName[$mon-1].$dateSeparator.$year." ".$hour.":".$minute.":".$sec." GMT";
+                $showDateTime = $dayName[$wday].','.' '.$monthDay.$dateSeparator.$monthName[$mon-1].$dateSeparator.$year.' '.$hour.':'.$minute.':'.$sec.' GMT';
         }
 
 
         if ($format =~ /^fancyDate$/i) {
-                my @dayName = qw(Sunday Monday Tueday Wednesday Thursday Friday Saturday);
-                my @monthName = qw(January Febuary March April May June July August September October November December);
-                my $numberCap = 'th';
+                my @dayName 	= qw(Sunday Monday Tueday Wednesday Thursday Friday Saturday);
+                my @monthName 	= qw(January Febuary March April May June July August September October November December);
+
+		#
+		# date names in french
+		#
+                if ($self->language() =~ /fr/i) { @dayName 	= qw(Dimanche Lundi Mardi Vendredi Jeudi Vendredi Samedi)}
+                if ($self->language() =~ /fr/i) { @monthName 	= qw(janvier fevrier mars avril mai juin juillet a^out septembre octobre novembre decembre)}
+
+              	# 
+              	# English th/nd/st rules 
+              	# 
+		my $numberCap = 'th';
                 $monthDay =~ s/^0//sg;
-                if ($monthDay =~ /^2$/) { $numberCap = "nd" }
-                if ($monthDay =~ /^3$/) { $numberCap = "rd" }
-                if ($monthDay =~ /^1$/) { $numberCap = "st" }
-                $showDateTime = $dayName[$wday].", ".$monthName[$mon-1]." ".$monthDay.$numberCap." of ".$year;
+                if ($monthDay =~ /^2$/ && $monthDay ne '12') { $numberCap = "nd" }
+                if ($monthDay =~ /^3$/ && $monthDay ne '13') { $numberCap = "rd" }
+                if ($monthDay =~ /1$/i && $monthDay ne '11') { $numberCap = "st" }
+
+		#
+		# English date format
+		# 
+                $showDateTime = $dayName[$wday].','.' '.$monthName[$mon-1].' '.$monthDay.$numberCap.','.' '.$year;
+
+		#
+		# French date format
+		#
+		if ($self->language() =~ /fr/i) { $showDateTime = $dayName[$wday].' le '.$monthDay.' '.$monthName[$mon-1].' '.$year }
         }
 
         if ($format =~ /^apache$/i) {
@@ -372,7 +482,7 @@ sub dateTime {
                 my @dayName = qw(Sun Mon Tue Wed Thu Fri Sat);
                 my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)=localtime($epochTime);
                 $year=$year+1900;
-                $showDateTime = $dayName[$wday].", ".$mday." ".$monthName[$mon]." ".$year." ".$hour.":".$minute.":".$sec." GMT";
+                $showDateTime = $dayName[$wday].','.' '.$mday.' '.$monthName[$mon].' '.$year.' '.$hour.':'.$minute.':'.$sec.' GMT';
         }
 
         if ($format =~ /^odbc$/i|| $format =~ /SQL/i) {
@@ -380,8 +490,20 @@ sub dateTime {
         }
 
         if ($format =~ /^date$/i) {
+		#
+		# english date
+		#
                 $showDateTime = $month.$dateSeparator.$monthDay.$dateSeparator.$year;
+
+		#
+		# french date
+		#
+              	if ($self->language() =~ /fr/i) { $showDateTime = $monthDay.$dateSeparator.$month.$dateSeparator.$year }
         }
+        
+	if ($format =~ /^month$/i) 	{ $showDateTime = $month }
+	if ($format =~ /^year$/i) 	{ $showDateTime = $year }
+	if ($format =~ /^day$/i) 	{ $showDateTime = $monthDay }
 
         if ($format =~ /^time$/i) {
                 $showDateTime = $hr.":".$min." EST";
@@ -410,6 +532,39 @@ sub dateTime {
         return $showDateTime;
 }
 
+=head2 field
+
+Return a field based on dynamic language and falling back to the default if the language specific value isn't available.
+
+        print $fws->field('title',%dataHash);
+
+=cut
+
+sub field {
+        my ($self, $fieldName,%dataHash) = @_;
+
+	#
+	# default field name
+	#
+	my $returnField = $dataHash{$fieldName};
+
+	#
+	# the datafields have a couple of issues with core field names that do not match its language field
+	# here are the conversions
+	#
+	$fieldName =~ s/navigationName/nav_name/sg;
+
+	#
+	# check to see if a language specific one exists
+	#
+	if ($dataHash{$fieldName.'_'.$self->language()} ne '') { $returnField = $dataHash{$fieldName.'_'.$self->language()} }
+
+	#
+	# return either the default, or the language specific one
+	#
+	return $returnField;	
+}
+
 =head2 formatCurrency
 
 Return a number in USD Format.
@@ -429,6 +584,74 @@ sub formatCurrency {
         $amount =~ s/\G(\d{1,3})(?=(?:\d\d\d)+(?:\.|$))/$1,/g;
         return "\$".$negative.$amount;
         }
+
+
+=head2 formatPhone
+
+Return a phone number in a specific format.
+
+        print $fws->formatPhone(format=>'full',phone=>'555-367-5309');
+
+
+Valid formats: 
+
+number: 1234567890
+
+full: (123) 456-7890
+
+dots: 123.456.7890
+
+=cut
+
+sub formatPhone {
+        my ($self,%paramHash) = @_;
+        my $returnPhone = $paramHash{'phone'};
+        $paramHash{'phone'}     =~ s/[\D]//sg;
+        $paramHash{'phone'}     = substr($paramHash{'phone'},-10);
+        if (length($paramHash{'phone'}) != 10) { $returnPhone = '' } else {
+                if ($paramHash{'format'} eq 'number') {
+                        $returnPhone            = $paramHash{'phone'};
+                }
+                if ($paramHash{'format'} eq 'full') {
+                        $returnPhone = '('.substr($paramHash{'phone'},0,3).') '.substr($paramHash{'phone'},3,3).'-'.substr($paramHash{'phone'},6,4);
+                }
+                if ($paramHash{'format'} eq 'dots') {
+                        $returnPhone = substr($paramHash{'phone'},0,3).'.'.substr($paramHash{'phone'},3,3).'.'.substr($paramHash{'phone'},6,4);
+                }
+        }
+        return $returnPhone;
+}
+
+=head2 FWSIcon
+
+Return just the file name when given a full file path
+
+       $valueHash{'html'} .= $fws->FWSIcon(icon=>'blank_16.png');
+
+You can pass the following keys:
+
+	icon
+	class
+	id
+	width
+	alt
+	onClick
+
+=cut
+
+sub FWSIcon {
+        my ($self,%paramHash) = @_;
+        if ($paramHash{'icon'} eq '') {         $paramHash{'icon'} = 'blank.png' }
+        if ($paramHash{'class'} ne '') {        $paramHash{'class'} = ' class="'.$paramHash{"class"}.'"' }
+        if ($paramHash{'id'} ne '') {           $paramHash{'id'} = ' id="'.$paramHash{'id'}.'"' }
+        if ($paramHash{'width'} eq '') {        $paramHash{'style'} .= "width:".$paramHash{'width'}."px" }
+        if ($paramHash{'alt'} eq '') {          $paramHash{'alt'} = '\'\'' }
+        if ($paramHash{'onClick'} ne '') {
+                $paramHash{'onClick'}   = " onclick=\"".$paramHash{'onClick'}."\"";
+                $paramHash{'style'}     = 'cursor:pointer;'.$paramHash{'style'};
+        }
+        return "<img src=\"".$self->{'fileFWSPath'}."/icons/".$paramHash{'icon'}."\" alt=\"".$paramHash{'alt'}."\"".$paramHash{'id'}.$paramHash{'class'}.$paramHash{'onClick'}." style=\"border:none;".$paramHash{'style'}."\"/>";
+}
 
 =head2 justFileName
 
@@ -521,6 +744,169 @@ sub removeHTML {
         return $theString;
 }
 
+=head2 startElement
+
+Return a the complement to endElement having the default title control and class labeling.
+
+	$valueHash{'html'} .= $fws->startElement(%dataHash);
+	$valueHash{'html'} .= $fws->endElement(%dataHash);
+
+If there is no dataHash to pass, you can set its the keys elementClass, title, and disableTitle to control its appearence.
+
+=cut
+
+sub startElement {
+        my ($self,%dataHash) = @_;
+
+        my $elementClass = $self->formValue('FWS_elementClassPrefix');
+        if ($dataHash{'elementClass'} ne '') { $elementClass = $dataHash{'elementClass'} }
+
+        #
+        # start two divs for positioning and backgrounds
+        #
+        my $html = "<div class=\"globalElementWrapper ".$elementClass."Wrapper\"><div class=\"globalElement ".$elementClass."\">";
+
+        #
+        # Title Field/Table
+        #
+        if ($dataHash{"disableTitle"} ne "1") {
+                $html .= "<div class=\"globalTitleWrapper ".$elementClass."TitleWrapper\"><h2 class=\"globalTitle ".$elementClass."Title\">";
+                $html .= $self->field('title',%dataHash);
+                $html .= "</h2></div>";
+                }
+
+        $html .= "<div class=\"globalContentWrapper ".$elementClass."ContentWrapper\">";
+
+        #
+        # wrap the element
+        #
+        return $html;
+        }
+
+=head2 stateDropDown
+
+Return a dropdown for all US States, passining it (current, class, id, style, topOption)  TopOption if passed will be the text that is displayed for the option, but the value will be blank.
+
+=cut
+
+sub stateDropDown {
+        my ($self, %paramHash) = @_;
+
+	#
+	# create a array we will process of states
+	#
+	my @stateArray = ('AL','Alabama','AK','Alaska','AZ','Arizona','AR','Arkansas','CA','California','CO','Colorado','CT','Connecticut','DE','Delaware','DC','District of Columbia','FL','Florida','GA','Georgia','HI','Hawaii','ID','Idaho','IL','Illinois','IN','Indiana','IA','Iowa','KS','Kansas','KY','Kentucky','LA','Louisiana','ME','Maine','MD','Maryland','MA','Massachusetts','MI','Michigan','MN','Minnesota','MS','Mississippi','MO','Missouri','MT','Montana','NE','Nebraska','NV','Nevada','NH','New Hampshire','NJ','New Jersey','NM','New Mexico','NY','New York','NC','North Carolina','ND','North Dakota','OH','Ohio','OK','Oklahoma','OR','Oregon','PA','Pennsylvania','RI','Rhode Island','SC','South Carolina','SD','South Dakota','TN','Tennessee','TX','Texas','UT','Utah','VT','Vermont','VA','Virginia','WA','Washington','WV','West Virginia','WI','Wisconsin','WY','Wyoming');
+
+	#
+	# preformat anything that will be in the html that is passed
+	#
+	if ($paramHash{'class'} ne '') 		{ $paramHash{'class'} 		= 'class="'.$paramHash{'class'}.'" ' }
+	if ($paramHash{'style'} ne '') 		{ $paramHash{'style'} 		= 'style="'.$paramHash{'style'}.'" ' }
+	if ($paramHash{'id'} ne '') 		{ $paramHash{'id'} 		= 'id="'.$paramHash{'id'}.'" ' }
+	if ($paramHash{'topOption'} ne '') 	{ $paramHash{'topOption'} 	= '<option value="">'.$paramHash{'topOption'}.'</option>' }
+
+	#
+	# start off the select with the top opction if present
+	#
+	my $returnHTML = '<select '.$paramHash{'id'}.$paramHash{'class'}.$paramHash{'style'}.'>';
+	$returnHTML .= $paramHash{'topOption'};
+
+	#
+	# loop though the array creating each one, with the selected if the current matches
+	#
+	while (@stateArray) {
+		my $stateAbbr = shift(@stateArray);
+		my $stateName = shift(@stateArray);
+		$returnHTML .= '<option ';
+		if ($paramHash{'current'} =~ /$stateAbbr/i) { $returnHTML .= 'selected="selected" ' }
+		$returnHTML .= 'value="'.$stateAbbr.'">'.$stateName.'</option>';
+	}
+
+	#
+	#  Close the select, and return our HTML for the select
+	#
+	$returnHTML .= '</select>';
+	return $returnHTML;
+}
+
+
+=head2 SQLDate
+
+Return a date string in SQL format if it was passed ass SQL format already, or convert it if it was sent as mm-dd-yyyy.
+
+        my $SQLDate = $fws->SQLDate('2012-02-03');
+
+=cut
+
+sub SQLDate {
+        my ($self,$date) = @_;
+        my @dateSplit = split(/\D/,$date);
+        if (length($dateSplit[2]) == 4) { $date = $dateSplit[2].'-'.$dateSplit[0].'-'.$dateSplit[1]}
+        else {$date =$dateSplit[0].'-'.$dateSplit[1].'-'.$dateSplit[2]}
+        return $self->safeSQL($date);
+}
+
+=head2 truncateContent
+
+Return content based on nearest ended word to the length parameter.
+
+        print $fws->truncateContent(content=>'this is some long content I want just a preview of.', length=>10, postText=>'...');
+
+=cut
+
+
+
+sub truncateContent {
+        my ($self,%paramHash) = @_;
+
+	my $theString = $paramHash{'content'};
+	my $maxLength = $paramHash{'length'};
+
+        #
+        # add a space to make the logic easier, we will eat this after the fact if its still sitting around
+        #
+        $theString .= ' ';
+        my @charArray = split(//,$theString);
+        my $count = 0;
+        my $newString = '';
+        my $currentWord = '';
+
+        #
+        # loop though the array, adding to the newstring if there is a friendly space
+        #
+        while (@charArray) {
+                $count++;
+                my $currentChar = shift(@charArray);
+                if ($count < $maxLength) {
+                        $currentWord .= $currentChar;
+                        if ($currentChar eq ' ') {
+                                $newString .= $currentWord;
+                                $currentWord = '';
+                        }
+                }
+        }
+
+        #
+        # if there is no friendly spaces, just chop at the maxLength
+        #
+        if ($newString eq '') { $newString = substr($theString, 0, $maxLength) }
+
+        #
+        # eat the post space if there is any.
+        #
+        $newString =~ s/\s+$//sg;
+
+	#
+	# add posttext if there is a chop
+	#
+	if (length($paramHash{'content'}) > $paramHash{'content'}) { $newString .= $paramHash{'postText'} }
+
+	#
+	# return our newly created pontentialy shorter string
+	#
+        return $newString;
+}
+
 =head1 FWS ADMIN METHODS
 
 These methods are used only by FWS Admin maintainers.   They should not be used out of the context of the FWS Admin as they could change without warning.
@@ -536,26 +922,71 @@ Return an edit field or field block for the FWS Admin.   The adminField method i
 
 NOTE: This should only be used in the context of the FWS Administration, and is only here as a reference for modifiers of the admin.
 
+Passable Keys:
+
+fieldType
+
+fieldName
+
+fieldValue
+
+fieldOptions
+
+unilingual: [1|0]
+
+ajaxUpdateGUID
+
+ajaxUpdateParentId
+
+id
+
+class
+
+style
+
+onSaveComplete
+
+updateType
+
+guid
+
+onKeyDown
+
+note
+
+afterFieldHTML
+
 =cut
 
 sub adminField {
         my ($self,%paramHash) = @_;
+
+	#
+	# for language replication fields, hold the array here so we can use it clean
+	#
+	my %origHash = %paramHash;
 
         #
         # set the id if not already set or if we going to use ajax, lets make a 
 	# new id so we don't get dups from bad programming
         #
         if ($paramHash{"id"} eq '' || $paramHash{"updateType"} ne "") { $paramHash{"id"} = $paramHash{"fieldName"} }
-
-        #
+        
+	#
         # make the guid for ajax unique if needed
         #
-        if ($paramHash{"guid"} eq '') {
-                $paramHash{"guid"} = $paramHash{"fieldName"};
-                if ($paramHash{"ajaxUpdateGUID"} ne '') 	{ $paramHash{"guid"} .= "_".$paramHash{"ajaxUpdateGUID"}}
-                if ($paramHash{"ajaxUpdateParentId"} ne '') 	{ $paramHash{"guid"} .= "_".$paramHash{"ajaxUpdateParentId"}}
-        }
+        if ($paramHash{"guid"} eq '') { $paramHash{"guid"} = $paramHash{"fieldName"} }
 
+	#
+	# Set the uniqueId to something other than guyid if its passed, for save icon references
+	#
+	if ($paramHash{'uniqueId'} eq '') { $paramHash{'uniqueId'} = $paramHash{'fieldName'} }
+
+	#
+	# if these are blank, add them to the unique to make it more unique
+	#
+        if ($paramHash{"ajaxUpdateGUID"} ne '') 	{ $paramHash{"uniqueId"} .= "_".$paramHash{"ajaxUpdateGUID"}}
+        if ($paramHash{"ajaxUpdateParentId"} ne '') 	{ $paramHash{"uniqueId"} .= "_".$paramHash{"ajaxUpdateParentId"}}
 
         #
         # if we are talking about a date, we are recieving it in SQL format, lets flip it real quicik
@@ -602,14 +1033,14 @@ sub adminField {
         # this is the js needed to copy the date field to the SQL compatable hidden field
         #
 
-        my $copyToHidden .= "document.getElementById('".$paramHash{'guid'}."_ajax').value=document.getElementById('".$paramHash{'guid'}."').value;";
+        my $copyToHidden .= "\$('#".$paramHash{'uniqueId'}."_ajax').val(\$('#".$paramHash{'uniqueId'}."').val());";
 
         if ($paramHash{"fieldType"} eq 'date') {
-                $copyToHidden = "if (document.getElementById('".$paramHash{'guid'}."\').value != '') {var dateSplit=document.getElementById('".$paramHash{'guid'}."\').value.split(/\\D/);while(dateSplit[1].length &lt; 2) { dateSplit[1] = '0'+dateSplit[1];}while(dateSplit[0].length &lt; 2) { dateSplit[0] = '0'+dateSplit[0];}document.getElementById('".$paramHash{'guid'}."_ajax').value=dateSplit[2]+'-'+dateSplit[0]+'-'+dateSplit[1];}else {document.getElementById('".$paramHash{'guid'}."_ajax').value='';}";
+                $copyToHidden = "if (document.getElementById('".$paramHash{'uniqueId'}."\').value != '') {var dateSplit=document.getElementById('".$paramHash{'uniqueId'}."\').value.split(/\\D/);while(dateSplit[1].length &lt; 2) { dateSplit[1] = '0'+dateSplit[1];}while(dateSplit[0].length &lt; 2) { dateSplit[0] = '0'+dateSplit[0];}document.getElementById('".$paramHash{'uniqueId'}."_ajax').value=dateSplit[2]+'-'+dateSplit[0]+'-'+dateSplit[1];}else {document.getElementById('".$paramHash{'uniqueId'}."_ajax').value='';}";
         }
 
         if ($paramHash{"fieldType"} eq 'dateTime') {
-                $copyToHidden = "if (document.getElementById('".$paramHash{'guid'}."\').value != '') {var dateSplit=document.getElementById('".$paramHash{'guid'}."\').value.split(/\\D/);while(dateSplit[1].length &lt; 2) { dateSplit[1] = '0'+dateSplit[1];}while(dateSplit[0].length &lt; 2) { dateSplit[0] = '0'+dateSplit[0];}document.getElementById('".$paramHash{'guid'}."_ajax').value=dateSplit[2]+'-'+dateSplit[0]+'-'+dateSplit[1]+' '+dateSplit[3]+':'+dateSplit[4]+':'+dateSplit[5];}else {document.getElementById('".$paramHash{'guid'}."_ajax').value='';}";
+                $copyToHidden = "if (document.getElementById('".$paramHash{'uniqueId'}."\').value != '') {var dateSplit=document.getElementById('".$paramHash{'uniqueId'}."\').value.split(/\\D/);while(dateSplit[1].length &lt; 2) { dateSplit[1] = '0'+dateSplit[1];}while(dateSplit[0].length &lt; 2) { dateSplit[0] = '0'+dateSplit[0];}document.getElementById('".$paramHash{'uniqueId'}."_ajax').value=dateSplit[2]+'-'+dateSplit[0]+'-'+dateSplit[1]+' '+dateSplit[3]+':'+dateSplit[4]+':'+dateSplit[5];}else {document.getElementById('".$paramHash{'uniqueId'}."_ajax').value='';}";
         }
 
         #
@@ -640,14 +1071,14 @@ sub adminField {
         # if your a text area, update the text
         #
         if ($paramHash{"updateType"} ne "" && $paramHash{"fieldType"} eq "textArea") {
-                $onSaveJS .= "\$('#".$paramHash{'guid'}."_status').hide();"
+                $onSaveJS .= "\$('#".$paramHash{'uniqueId'}."_status').css('visibility', 'hidden');"
         }
 
         #
         # if your a password, update the text
         #
         if ($paramHash{"updateType"} ne "" && $paramHash{"fieldType"} eq "password") {
-                $onSaveJS .= "\$('#".$paramHash{'guid'}."_passwordStrong').hide();"
+                $onSaveJS .= "\$('#".$paramHash{'uniqueId'}."_passwordStrong').hide();"
         }
 
         #
@@ -655,7 +1086,7 @@ sub adminField {
         #
         my $imageID;
         if ($paramHash{"updateType"} ne "") {
-                $imageID = "'#".$paramHash{'guid'}."_img'";
+                $imageID = "'#".$paramHash{'uniqueId'}."_img'";
                 $onSaveJS .= "\$(".$imageID.").attr('src','".$self->{'fileFWSPath'}."/saved.gif');";
                 $AJAXSave .= "\$(".$imageID.").attr('src','".$self->loadingImage()."');";
         }
@@ -677,10 +1108,10 @@ sub adminField {
         #
         if ($paramHash{"updateType"} ne "") {
                 if ($paramHash{"updateType"} eq "AJAXUpdate" || $paramHash{"updateType"} eq "AJAXExt") {
-                        $AJAXSave .= "\$('<div></div>').FWSAjax({queryString:'s=".$self->{'siteId'}."&guid=".$paramHash{'ajaxUpdateGUID'}."&parent=".$paramHash{'ajaxUpdateParentId'}."&table=".$paramHash{'ajaxUpdateTable'}."&field=".$paramHash{'fieldName'}."&value='+encodeURIComponent(\$('#".$paramHash{'guid'}."_ajax').val())+'&pageAction=".$paramHash{'updateType'}."&returnStatusNote=1'".$onSaveJS.",showLoading:false});";
+                        $AJAXSave .= "\$('<div></div>').FWSAjax({queryString:'s=".$self->{'siteId'}."&guid=".$paramHash{'ajaxUpdateGUID'}."&parent=".$paramHash{'ajaxUpdateParentId'}."&table=".$paramHash{'ajaxUpdateTable'}."&field=".$paramHash{'fieldName'}."&value='+encodeURIComponent(\$('#".$paramHash{'uniqueId'}."_ajax').val())+'&pageAction=".$paramHash{'updateType'}."&returnStatusNote=1'".$onSaveJS.",showLoading:false});";
                 }
                 else {
-                    $AJAXSave .= "\$('<div></div>').FWSAjax({queryString:'s=".$self->{'siteId'}."&guid=".$paramHash{'ajaxUpdateGUID'}."&parent=".$paramHash{'ajaxUpdateParentId'}."&field=".$paramHash{'fieldName'}."&value='+encodeURIComponent(\$('#".$paramHash{'guid'}."_ajax').val())+'&pageAction=".$paramHash{'updateType'}."&p=".$paramHash{'updateType'}."'".$onSaveJS.",showLoading:false});";
+                    $AJAXSave .= "\$('<div></div>').FWSAjax({queryString:'s=".$self->{'siteId'}."&guid=".$paramHash{'ajaxUpdateGUID'}."&parent=".$paramHash{'ajaxUpdateParentId'}."&field=".$paramHash{'fieldName'}."&value='+encodeURIComponent(\$('#".$paramHash{'uniqueId'}."_ajax').val())+'&pageAction=".$paramHash{'updateType'}."&p=".$paramHash{'updateType'}."'".$onSaveJS.",showLoading:false});";
                 }
         }
 
@@ -691,15 +1122,15 @@ sub adminField {
         #
         if ($paramHash{'fieldType'} eq 'date' || $paramHash{'fieldType'} eq 'dateTime' ) {
                 my $reformatJS;
-                $reformatJS .= "if (\$('".$paramHash{'guid'}."_ajax').val()"." != '') {";
+                $reformatJS .= "if (\$('".$paramHash{'uniqueId'}."_ajax').val()"." != '') {";
                 if ($paramHash{'dateFormat'} =~ /number/i) {
-                        $reformatJS .= "var cleanDate;cleanDate = document.getElementById('".$paramHash{'guid'}."_ajax').value.replace(/\\D/g,'');";
-                        $reformatJS .= "\$('#".$paramHash{'guid'}."_ajax').val(cleanDate);";
+                        $reformatJS .= "var cleanDate;cleanDate = document.getElementById('".$paramHash{'uniqueId'}."_ajax').value.replace(/\\D/g,'');";
+                        $reformatJS .= "\$('#".$paramHash{'uniqueId'}."_ajax').val(cleanDate);";
                 }
                 $reformatJS .= '}';
 
                 $AJAXSave = $copyToHidden.
-                        "var dateSplit=document.getElementById('".$paramHash{'guid'}.'_ajax\').value.split(/\\D/);if (document.getElementById(\''.$paramHash{'guid'}.'_ajax\').value == \'\' || (dateSplit[0].length==4 &amp;&amp; dateSplit[1] &gt; 0 &amp;&amp; dateSplit[1] &lt; 13 &amp;&amp;  dateSplit[2] &gt; 0 &amp;&amp; dateSplit[2] &lt; 32 )) { '.
+                        "var dateSplit=document.getElementById('".$paramHash{'uniqueId'}.'_ajax\').value.split(/\\D/);if (document.getElementById(\''.$paramHash{'uniqueId'}.'_ajax\').value == \'\' || (dateSplit[0].length==4 &amp;&amp; dateSplit[1] &gt; 0 &amp;&amp; dateSplit[1] &lt; 13 &amp;&amp;  dateSplit[2] &gt; 0 &amp;&amp; dateSplit[2] &lt; 32 )) { '.
                         $reformatJS.$AJAXSave .'}';
         }
 
@@ -718,16 +1149,16 @@ sub adminField {
 	# lets starting building the actual fieldHTML we will return
 	# EVERYONE gets the hidden ajax guid
 	#
-        my $fieldHTML = "<input type=\"hidden\" name=\"".$paramHash{'guid'}."_ajax\" id=\"".$paramHash{'guid'}."_ajax\"/>";
+        my $fieldHTML = "<input type=\"hidden\" name=\"".$paramHash{'uniqueId'}."_ajax\" id=\"".$paramHash{'uniqueId'}."_ajax\"/>";
 
 	#
 	# textArea starter with hidden save message only if we are going to update it
 	#
         if ($paramHash{"updateType"} ne "" && $paramHash{"fieldType"} eq "textArea") {
-                $fieldHTML .= "<div id=\"".$paramHash{"guid"}."_status\" style=\"color:#FF0000;display:none;\">";
-                $fieldHTML .= "<img alt=\"save\" src=\"".$self->{'fileFWSPath'}."/saved.gif\" style=\"border:0pt none;\" id=\"".$paramHash{"guid"}."_img\" onclick=\"".$AJAXSave."\"/>";
-                $fieldHTML .= "Your content has not been saved";
-                $fieldHTML .= "</div><br/>";
+                $fieldHTML .= "<div id=\"".$paramHash{"uniqueId"}."_status\" style=\"color:#FF0000;visibility:hidden;\">";
+                $fieldHTML .= "<img alt=\"save\" src=\"".$self->{'fileFWSPath'}."/saved.gif\" style=\"border:0pt none;\" id=\"".$paramHash{"uniqueId"}."_img\" onclick=\"".$AJAXSave."\"/>";
+                $fieldHTML .= "&nbsp;Your content has not been saved";
+                $fieldHTML .= "</div>";
         }
 
         #
@@ -816,11 +1247,54 @@ sub adminField {
                 $fieldHTML .= "<select name=\"".$paramHash{"fieldName"}."\"".$styleHTML." class=\"".$paramHash{"class"}."\"";
         }
 
+        if ($paramHash{"fieldType"} eq "birthday") {
+
+		#	
+		# onchange bday js
+		#
+		my $bdayOnchange .= "if (!isNaN(\$('#".$paramHash{'uniqueId'}."_year').val()) && !isNaN(\$('#".$paramHash{'uniqueId'}."_day').val()) && !isNaN(\$('#".$paramHash{'uniqueId'}."_month').val())) {  \$('#".$paramHash{'uniqueId'}."_ajax').val(\$('#".$paramHash{'uniqueId'}."_year').val()+'-'+\$('#".$paramHash{'uniqueId'}."_month').val()+'-'+\$('#".$paramHash{'uniqueId'}."_day').val());}";
+		#
+		# month
+		#
+		$fieldHTML .= '<select class="FWSInputField" id="'.$paramHash{'uniqueId'}.'_month" name="'.$paramHash{'uniqueId'}.'_month" onchange="'.$bdayOnchange.'">';
+		$fieldHTML .= '<option>- Month -</option>';
+		$fieldHTML .= '<option value="01">January</option>';
+		$fieldHTML .= '<option value="02">February</option>';
+		$fieldHTML .= '<option value="03">March</option>';
+		$fieldHTML .= '<option value="04">April</option>';
+		$fieldHTML .= '<option value="05">May</option>';
+		$fieldHTML .= '<option value="06">June</option>';
+		$fieldHTML .= '<option value="07">July</option>';
+		$fieldHTML .= '<option value="08">August</option>';
+		$fieldHTML .= '<option value="09">September</option>';
+		$fieldHTML .= '<option value="10">October</option>';
+		$fieldHTML .= '<option value="11">November</option>';
+		$fieldHTML .= '<option value="12">December</option>';
+		$fieldHTML .= '</select>';
+		
+		#
+		# Day
+		#
+		$fieldHTML .= '<select class="FWSInputField" id="'.$paramHash{'uniqueId'}.'_day" name="'.$paramHash{'uniqueId'}.'_day" onchange="'.$bdayOnchange.'">';
+		$fieldHTML .= '<option>- Day -</option>';
+		for (my $count = 1; $count <= 31; $count++) { my $lead = '0'; if ($count > 9) {$lead = ''}$fieldHTML .= '<option value="'.$lead.$count.'">'.$count.'</option>' }
+		$fieldHTML .= '</select>';
+		
+		#
+		# year
+		#
+		$fieldHTML .= '<select class="FWSInputField" id="'.$paramHash{'uniqueId'}.'_year" name="'.$paramHash{'uniqueId'}.'_year" onchange="'.$bdayOnchange.'">';
+		$fieldHTML .= '<option>- Year -</option>';
+		my $year = $self->dateTime(format=>'year');
+		for (my $count = $year-4; $count > $year-110; $count--) { $fieldHTML .= '<option value="'.$count.'">'.$count.'</option>' }
+		$fieldHTML .= '</select>';
+	}    
+
         #
         # textArea
         #
         if ($paramHash{"fieldType"} eq "textArea") {
-                $fieldHTML .= "<textarea rows=\"4\" cols=\"43\" name=\"".$paramHash{"fieldName"}."\"".$styleHTML." class=\"".$paramHash{"class"}."\"";
+                $fieldHTML .= "<textarea rows=\"8\" cols=\"70\" name=\"".$paramHash{"fieldName"}."\"".$styleHTML." class=\"".$paramHash{"class"}."\"";
         }
 
 
@@ -831,7 +1305,7 @@ sub adminField {
                 #
                 # set the Id
                 #
-                $fieldHTML .= " id=\"".$paramHash{"guid"}."\"";
+                $fieldHTML .= " id=\"".$paramHash{"uniqueId"}."\"";
                 if ($paramHash{"readOnly"} eq "1") { $fieldHTML .= " disabled=\"disabled\"" }
         }
 
@@ -846,9 +1320,14 @@ sub adminField {
 
         if ($paramHash{'updateType'} ne '' && $paramHash{'fieldType'} eq 'password')  {
                 $fieldHTML .= ' onkeyup="';
-                $fieldHTML .= 'if (document.getElementById(\''.$paramHash{'guid'}.'\').value.search(/(?=^.{7,}$)(?=.*\\d)(?=.*[A-Z])(?=.*[a-z]).*$/) != -1)';
-                $fieldHTML .= "{document.getElementById('".$paramHash{'guid'}."_passwordWeak').style.display='none';document.getElementById('".$paramHash{'guid'}."_passwordStrong').style.display='inline';}";
-                $fieldHTML .= "else {document.getElementById('".$paramHash{'guid'}."_passwordWeak').style.display='inline';document.getElementById('".$paramHash{'guid'}."_passwordStrong').style.display='none';}";
+		if ($paramHash{'strongPassword'} ne '0') {
+                	$fieldHTML .= 'if (document.getElementById(\''.$paramHash{'uniqueId'}.'\').value.search(/(?=^.{7,}$)(?=.*\\d)(?=.*[A-Z])(?=.*[a-z]).*$/) != -1) {';
+	                $fieldHTML .= "\$('#".$paramHash{'uniqueId'}."_passwordWeak').hide();";
+		}
+		$fieldHTML .= "\$('#".$paramHash{'uniqueId'}."_passwordStrong').show();";
+		if ($paramHash{'strongPassword'} ne '0') {
+                	$fieldHTML .= " } else {\$('#".$paramHash{'uniqueId'}."_passwordWeak').show();\$('#".$paramHash{'uniqueId'}."_passwordStrong').hide();}";
+		}
                 $fieldHTML .= '"';
         }
 
@@ -865,10 +1344,17 @@ sub adminField {
                 #
                 # key down & context right clicking ajax image update
                 #
-                $fieldHTML .= " onkeydown=\"document.getElementById('".$paramHash{'guid'}."_img').src='".$self->{'fileFWSPath'}."/save.gif';";
+
+		#
+		# choose a different icon
+		#
+		my $saveIcon = $self->{'fileFWSPath'}."/save.gif";
+		if ($paramHash{'saveIcon'} ne '') { $saveIcon = $self->{'fileFWSPath'}.'/icons/'.$paramHash{'saveIcon'} }
+
+                $fieldHTML .= " onkeydown=\"document.getElementById('".$paramHash{'uniqueId'}."_img').src='".$saveIcon."';";
 
                 if ($paramHash{'updateType'} ne '' && $paramHash{'fieldType'} eq 'textArea')  {
-                        $fieldHTML .= "document.getElementById('".$paramHash{'guid'}."_status').style.display='inline';";
+                        $fieldHTML .= "\$('#".$paramHash{'uniqueId'}."_status').css('visibility', 'visible');";
                 }
                 $fieldHTML .= $paramHash{'onKeyDown'};
                 $fieldHTML .= "\" ";
@@ -908,7 +1394,7 @@ sub adminField {
                         my $optionName = shift(@optionSplit);
                         $fieldHTML .= "<input type=\"radio\" name=\"".$paramHash{"fieldName"}."\"".$styleHTML." class=\"".$paramHash{"class"}."\"";
                         $fieldHTML .= " onclick=\"".$paramHash{"onChange"};
-                        $fieldHTML .= "document.getElementById('".$paramHash{'guid'}."_ajax').value='".$optionValue."';";
+                        $fieldHTML .= "\$('#".$paramHash{'uniqueId'}."_ajax').val('".$optionValue."');";
                         $fieldHTML .= $AJAXSave;
                         $fieldHTML .= '"';
                         if ($paramHash{"readOnly"} eq "1") { $fieldHTML .= " disabled=\"disabled\"" }
@@ -965,24 +1451,48 @@ sub adminField {
                 $fieldHTML .= "/>";
         }
 
-        if ($paramHash{"updateType"} ne "" && $paramHash{"fieldType"} eq "password") {
-                $fieldHTML .= "<br/><div id=\"".$paramHash{"guid"}."_passwordWeak\" style=\"color:#FF0000;display:none;\">";
-                $fieldHTML .= "Passwords must be at least 6 characters and contain a number, an upper case character, a lower case character.";
-                $fieldHTML .= "</div>";
-                $fieldHTML .= "<div id=\"".$paramHash{"guid"}."_passwordStrong\" style=\"color:#FF0000;display:none;\">";
-                $fieldHTML .= "<img alt=\"save\" src=\"".$self->{'fileFWSPath'}."/saved.gif\" style=\"border:0pt none;\" id=\"".$paramHash{"guid"}."_img\" onclick=\"".$AJAXSave."\"/>";
-                $fieldHTML .= " Click the disk icon to commit the new password";
+
+	#
+	# add autocomplete code
+	#
+	if ($paramHash{'autocompleteSource'} ne '') {
+        $fieldHTML .= '<script>$("#'.$paramHash{'uniqueId'}.'" ).autocomplete({';
+        $fieldHTML .= 'source: '.$paramHash{'autocompleteSource'}.',';
+        $fieldHTML .= 'search: function(event, ui) {$("#'.$paramHash{'uniqueId'}.'_img").attr("src","'.$self->loadingImage().'");'.$paramHash{'autocompleteSearch'} .'},';
+        $fieldHTML .= 'open: function(event, ui) {$("#'.$paramHash{'uniqueId'}.'_img").attr("src","'.$self->{'fileWebPath'}.'/fws/icons/blank_16.png");'.$paramHash{'autocompleteOpen'} .'},';
+        $fieldHTML .= 'select: function(event, ui) {'.$paramHash{'autocompleteSelect'} .'}';
+	$fieldHTML .= '});</script>';
+	}
+
+
+        if ($paramHash{"updateType"} ne "" && $paramHash{"fieldType"} eq "password" ) {
+		if ($paramHash{'strongPassword'} ne '0') {
+	                $fieldHTML .= "<div id=\"".$paramHash{"uniqueId"}."_passwordWeak\" style=\"color:#FF0000;display:none;\">";
+	                $fieldHTML .= "Passwords must be at least 6 characters and contain a number, an upper case character, a lower case character.";
+	                $fieldHTML .= "</div>";
+		}
+                $fieldHTML .= "<div id=\"".$paramHash{"uniqueId"}."_passwordStrong\" style=\"color:#FF0000;display:none;\">";
+                $fieldHTML .= "<img alt=\"save\" src=\"".$self->{'fileFWSPath'}."/saved.gif\" style=\"border:0pt none;\" id=\"".$paramHash{"uniqueId"}."_img\" onclick=\"".$AJAXSave."\"/>";
+                $fieldHTML .= " Click the disk icon to commit your change";
                 $fieldHTML .= "</div>";
         }
 
         #
         # stick the image in for saving if we are an updating field
         #
-        if ($paramHash{"updateType"} ne "" && ($paramHash{"fieldType"} =~ /^(color|currency|dateTime|number|text|password|dropDown|date|radio)$/)) {
-                $fieldHTML .= "<img alt=\"save\" src=\"".$self->{'fileFWSPath'}."/saved.gif\" style=\"border:0pt none;\" id=\"".$paramHash{"guid"}."_img\"";
+        if (($paramHash{"updateType"} ne "" && ($paramHash{"fieldType"} =~ /^(color|currency|dateTime|number|text|password|dropDown|date|radio)$/)) || $paramHash{'autocompleteSource'} ne '') {
+                $fieldHTML .= "<img alt=\"save\" src=\"".$self->{'fileFWSPath'}."/saved.gif\" style=\"border:0pt none;\" id=\"".$paramHash{"uniqueId"}."_img\"";
                 if ($paramHash{"noAutoSave"} eq "1") { $fieldHTML .= " onclick=\"".$AJAXSave."\"" }
                 $fieldHTML .= "/>";
         }
+
+	#
+	# if we are a text area, lets place lang id if needed
+	#
+	if ($paramHash{"fieldType"} =~ /^text$/ || $paramHash{"fieldType"} =~ /^textArea$/ ) {
+		my $langId = $paramHash{"fieldName"};
+		if ($langId =~ /_(\w\w)$/ && $langId !~ /_id/i) { $fieldHTML .= "[".$1."]" }
+	}
 
         #
         # if there is a title, wrap it with the GNF Field table!
@@ -1012,8 +1522,29 @@ sub adminField {
                 else { $html .= "&nbsp;"}
                 $html .= "</div>";
 
+		
+
                 $html .= "<div ".$FWSFieldValueWrapper."class=\"FWSFieldValueWrapper\">";
                 $html .= "<div ".$FWSFieldValue."class=\"FWSFieldValue\">".$fieldHTML.$paramHash{"afterFieldHTML"}."</div>";
+	        
+		if (($paramHash{"fieldType"} =~ /^text$/ || $paramHash{"fieldType"} =~ /^textArea$/) && $paramHash{"unilingual"} ne '1' && $paramHash{'fieldName'} ne 'name') {
+			my @langArray = $self->languageArray();
+			#
+			# eat the default
+			#
+			shift(@langArray); 
+			while (@langArray) {
+				my $langId = shift(@langArray);
+				my %langHash = %origHash;
+				$langHash{'updateType'} = 'AJAXExt';
+				$langHash{'uniqueId'}  	= $langHash{'fieldName'}.'_'.$langHash{'guid'}.'_'.$langId;
+				delete $langHash{'title'};
+				$langHash{'fieldName'} 	= $langHash{'fieldName'}."_".$langId;
+				$langHash{'fieldValue'} = $langHash{$langHash{'fieldName'}};
+				$html .= $self->adminField(%langHash);	
+			} 
+        	}
+
                 if ($paramHash{"note"} ne "") { $html .= "<div class=\"FWSFieldValueNote\">".$paramHash{"note"}."</div>" }
                 $html .= "</div>";
 
@@ -1025,6 +1556,19 @@ sub adminField {
         return $fieldHTML;
 }
 
+=head2 endElement
+
+Return the complement to startElement() having the default by placing the appropriate close divs created in startElement().
+
+        $valueHash{'html'} .= $fws->startElement(%dataHash);
+        $valueHash{'html'} .= $fws->endElement(%dataHash);
+
+=cut
+
+sub endElement {
+        my ($self) = @_;
+        return "</div></div></div>";
+        }
 
 =head2 adminPageHeader
 
@@ -1066,17 +1610,27 @@ Return jQueryUI tab html.  The tab names, tab content, tinyMCE editing field nam
         # add the data to the tabs and panels to the HTML
         #
         $valueHash{'html'} .= $self->tabs(	id		=>'theIdOfTheTabContainer',
-	                                  	tabs		=>[@tabArray],
-	                                  	tabContent	=>[@contentArray],
-	                                  	tabJava		=>[@javaArray],
+	                                  	tabs		=>[@tabs],
+	                                  	tabContent	=>[@tabContent],
+	                                  	tabJava		=>[@tabJava],
 	                                 	
-						# tinyMCE paramaters - usualy only for dynamic edit 
-						# modals and tabs. 
-						tabFields	=>[@fieldArray],
-						guid		=>'someGUIDforTinyMCEEdits',
+						# html and file tab support
+	                                  	tabType		=>[@tabType],		# file, html or leave empty for standard panel
+											# setting type will overwrite content and java provided
+
+						tabFields	=>[@tabFields],		# field your updating
+
+						guid		=>'someGUID',		# guid your updating
+						
+						# optional if your talking to a non-data table
+						tabUpdateType	=>[@tabUpdateType],  	# defaults to AJAXExt
+						table		=>'data',		# defaults to data
+
+						# for file type only (required)
+						currentFile     =>[@currentFile],	# 
 	                                  	);
 
-NOTE: This should only be used in the context of the FWS Administration, and is only here as a reference for modifiers of the admin. 
+NOTE: This should only be used in the context of the FWS Administration, and is only here as a reference for modifiers of the admin.   In future versions this will be replaced with a hash array style paramater to make this less cumbersome, but this will be avaiable for legacy controls. 
 
 =cut
 
@@ -1095,10 +1649,35 @@ sub tabs {
         my $tabHTML = "<div id=\"".$paramHash{"id"}."\" class=\"FWSTabs tabContainer ui-tabs ui-widget ui-widget-content ui-corner-all\"><ul class=\"tabList ui-tabs ui-tabs-nav ui-helper-reset ui-helper-clearfix ui-widget-header ui-corner-all\">";
 
         while (@{$paramHash{tabs}}) {
-                my $tabJava = shift(@{$paramHash{tabJava}});
-                my $tabContent = shift(@{$paramHash{tabContent}});
-                my $tabName = shift(@{$paramHash{tabs}});
-                my $fieldName = shift(@{$paramHash{tabFields}});
+                my $tabJava 		= shift(@{$paramHash{tabJava}});
+                my $tabContent 		= shift(@{$paramHash{tabContent}});
+                my $tabName 		= shift(@{$paramHash{tabs}});
+                my $fieldName 		= shift(@{$paramHash{tabFields}});
+                my $tabType 		= shift(@{$paramHash{tabType}});
+                my $tabUpdateType 	= shift(@{$paramHash{tabUpdateType}});
+                my $currentFile 	= $self->urlEncode(shift(@{$paramHash{currentFile}}));
+
+		#
+		# set the default
+		#               
+		if ($tabUpdateType eq '') { $tabUpdateType = 'AJAXExt' }
+
+		#
+		# pass all the info in as the id so we can save it later
+		#
+		my $editorName  = $paramHash{'guid'}."_v_".$fieldName."_v_".$paramHash{'table'}."_v_".$tabUpdateType;
+
+		#
+		# tab type overwrites tabJava and tabContent!
+		#
+		if ($tabType eq 'file') {
+            		$tabContent 	= "<div id=\"dataEdit".$fieldName."\">Loading...</div>";
+			$tabJava	= "if(\$('#dataEdit".$fieldName."').html().length < 50) {\$('#dataEdit".$fieldName."').FWSAjax({queryString: '".$self->{'queryHead'}."p=fws_fileManager&current_file=".$currentFile."&field_update_type=".$tabUpdateType."&field_table=".$paramHash{'table'}."&field_name=".$fieldName."&guid=".$paramHash{'guid'}."',showLoading: false});}";
+		}
+
+		if ($tabType eq 'html') {
+            		$tabContent 	= "<div name=\"".$fieldName."\" id=\"".$editorName."\" class=\"HTMLEditor\" style=\"width:100%;height:445px;\">".$tabContent."</div><div style=\"display:none;\" id=\"".$paramHash{'guid'}."_v_".$fieldName."_v_StatusNote\"></div>";
+		}
 
                 #
                 # this is the connector between the tab and its HTML
@@ -1109,8 +1688,8 @@ sub tabs {
                 # if tiny mce is being used on a tab, lets light it up per the clicky
                 # also tack on any tabJava we had passed to us
                 #
-                my $editorName  = $paramHash{'guid'}."_v_".$fieldName;
                 my $javaScript          = "if(typeof(tinyMCE) != 'undefined') {";
+		$javaScript		.= "for (id in tinyMCE.editors) { tinyMCE.execCommand('mceRemoveControl', false, id); }";
                 $javaScript             .= "tinyMCE.execCommand('mceAddControl', false, '".$editorName."');}";
                 $javaScript             .= "if(typeof(\$.modal) != 'undefined') {\$.modal.update();}";
                 $javaScript             .= $tabJava;

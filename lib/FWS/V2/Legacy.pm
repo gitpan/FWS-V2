@@ -296,6 +296,17 @@ sub googleAppsKeyFile {
         return $self->{"googleAppsKeyFile"};
 }
 
+=head2 phone
+
+Deprecated, use formatPhone()
+
+=cut
+
+sub phone {
+        my ($self,%paramHash) = @_;
+        return $self->formatPhone(%paramHash);
+}
+
 =head2 siteGlobalValue
 
 Deprecated, use siteValue()
@@ -330,6 +341,17 @@ sub showDateTime {
 	my $self;
         ($self,$paramHash{'format'},$paramHash{'monthMod'},$paramHash{'epochTime'},$paramHash{'GMTOffset'},$paramHash{'SQLTime'}) = @_;
         return $self->dateTime(%paramHash);
+}
+
+=head2 truncatePhrase
+
+Deprecated, use truncateContent()
+
+=cut
+
+sub truncatePhrase {
+        my ($self,$theString,$maxLength) = @_;
+        return $self->truncateContent(content=>$theString,length=>$maxLength);
 }
 
 =head2 pageIdOfElement

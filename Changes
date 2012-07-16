@@ -1,4 +1,18 @@
 Revision history for FWS-V2
+0.008
+ - Minor bug fixes
+ - Added safeURL method
+ - Added SQLDate method
+ - Added stateDropDown method
+ - Guid based inate friendly urls now can use ignored extensions
+ - Implented core language selection hash support
+ - New method applyLanguage to transform a hash into its correct language
+ - Ported phone formating methods
+ - Modified language() to always return upper case
+ - Date control now support French langauge
+ - Update friendlyURL\pageFriendlyURL support for non page element page renderings
+ - Upgraded to 3.5.x tinyMCE + ported out inline tinyMCE js to be part of the tinyMCE init js
+
 0.007 2012-05-03
  - Added removeHTML() and formatCurrency()
  - Added adminUserArray(),adminPageHeader()
