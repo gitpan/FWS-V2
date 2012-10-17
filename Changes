@@ -1,15 +1,31 @@
 Revision history for FWS-V2
-0.008
+0.009 2012-10-16
+ - Add an ease of use method for date comparing: dateDiff()
+ - Plugins using friendlyURL table fields in thier schema are now added to the friendly URL look up query automatically
+ - Required table to be present before altering tables when doing DBUpdate()
+ - Corrected an issue with postText for truncateContent()
+ - Added numberTime to dateTime function as a possible input format
+ - setCacheIndex() will now only save to the site if the index has changed
+ - formatDate() is now the new name for dateTime(), the latter is still present as a legacy subroutine
+ - HTTPRequest() can now be passed what agent it is using
+ - Added 'force install' option to the plugin installer
+ - Added safeXML() method to Safety.pm
+ - Added shortDate to dateTime() MMM DD YYYY (where MMM is the three letter acrynomn of the month in caps)
+ - _deleteOrphanedData utility now can be passed a unique DBH
+ - Made connectDBH() capable of being used outside the context of the FWS for other functions by passing a hash of its requirements
+ - Other minor formatting and documentation updates
+
+0.008 2012-07-16
  - Minor bug fixes
  - Added safeURL method
  - Added SQLDate method
  - Added stateDropDown method
- - Guid based inate friendly urls now can use ignored extensions
+ - GUID based inate friendly URLs now can use ignored extensions
  - Implented core language selection hash support
  - New method applyLanguage to transform a hash into its correct language
- - Ported phone formating methods
+ - Ported phone formatting methods
  - Modified language() to always return upper case
- - Date control now support French langauge
+ - Date control now support French language
  - Update friendlyURL\pageFriendlyURL support for non page element page renderings
  - Upgraded to 3.5.x tinyMCE + ported out inline tinyMCE js to be part of the tinyMCE init js
 

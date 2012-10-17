@@ -9,11 +9,11 @@ FWS::V2::Database - Framework Sites version 2 data management
 
 =head1 VERSION
 
-Version 0.004
+Version 0.005
 
 =cut
 
-our $VERSION = '0.004';
+our $VERSION = '0.005';
 
 
 =head1 SYNOPSIS
@@ -287,7 +287,6 @@ sub alterTable {
         #
         # set any keys if not the same;
         #
-	#$self->FWSLog($paramHash{'table'}."_".$paramHash{'field'}." ". $tableFieldHash{$paramHash{'table'}."_".$paramHash{'field'}}{"key"}  );
         if ($tableFieldHash{$paramHash{'table'}."_".$paramHash{'field'}}{"key"} ne "MUL" && $paramHash{'key'} ne "") {
                 $self->runSQL(SQL=>$indexStatement,noUpdate=>1);
                 $sqlReturn .=  $indexStatement."; ";
@@ -297,22 +296,46 @@ sub alterTable {
 }
 
 
-
 =head2 connectDBH
 
 Do the initial database connection via MySQL or SQLite.  This method will return back the DBH it creates, but it is only here for completeness and would normally never be used.  For FWS database routines this is not required as it will be implied when executing those methods.
         
 	$fws->connectDBH();
 
+If you want to pass DBType, DBName, DBHost, DBUser, and DBPassword as a hash, the global FWS DBH will not be passed, and the DBH it creates will be returned from the method.
+
 =cut
 
 sub connectDBH {
-        my ($self) = @_;
+        my ($self,%paramHash) = @_;
+
+	#
+	# do some default mapping, and overwite is passed directly
+	#
+	my $DBType 	= $self->{'DBType'};
+	my $DBName 	= $self->{'DBName'};
+	my $DBHost 	= $self->{'DBHost'};
+	my $DBUser 	= $self->{'DBUser'};
+	my $DBPassword 	= $self->{'DBPassword'};
+
+	#
+	# overwite with whats passed
+	#
+	if ($paramHash{'DBType'} ne '') {	$DBType = $paramHash{'DBType'} }
+	if ($paramHash{'DBName'} ne '') {	$DBName = $paramHash{'DBName'} }
+	if ($paramHash{'DBHost'} ne '') {	$DBHost = $paramHash{'DBHost'} }
+	if ($paramHash{'DBUser'} ne '') {	$DBUser = $paramHash{'DBUser'} }
+	if ($paramHash{'DBPassword'} ne '') {	$DBPassword = $paramHash{'DBPassword'} }
+
+	#
+	# fill this up!
+	#	
+	my $DBH;
 
         #
-        # grab the DBI if we don't have it yet
+        # grab the DBI if we don't have it yet, or if we are passed a name, that means we are doing something unique
         #
-        if (!defined $self->{'_DBH'}) {
+        if (!defined $self->{'_DBH'} || $paramHash{'DBName'} ne '') {
 
                 #
                 # hook up with some DBI
@@ -322,28 +345,38 @@ sub connectDBH {
 		#
 		# DBType for mysql is always lower case
 		#
-                if ($self->{'DBType'} =~ /mysql/i) { $self->{'DBType'} = lc($self->{'DBType'}) }
+                if ($DBType =~ /mysql/i) { $DBType = lc($DBType) }
 
                 #
                 # default set to mysql
                 #
-                my $connectString = $self->{'DBType'}.":".$self->{'DBName'}.":".$self->{'DBHost'}.":3306";
+                my $connectString = $DBType.":".$DBName.":".$DBHost.":3306";
 
                 #
                 # SQLite
                 #
-                if ($self->{'DBType'} =~ /SQLite/i) { $connectString = "SQLite:".$self->{'DBName'} }
+                if ($DBType =~ /SQLite/i) { $connectString = "SQLite:".$DBName }
 
                 #
                 # set the DBH for use throughout the script
                 #
-                $self->{'_DBH'} = DBI->connect("DBI:".$connectString,$self->{'DBUser'}, $self->{'DBPassword'});
+                $DBH = DBI->connect("DBI:".$connectString,$DBUser,$DBPassword);
 
-                #
-                # in case the user is going to do thier own thing, we will pass back the DBH
-                #
-                return $self->{'_DBH'};
+		#
+		# send an error if we got one
+		#
+		if (DBI->errstr ne '') { $self->FWSLog('DB Connection error: '.DBI->errstr) }
         }
+
+	#
+	# if DBH isn't defined then lets define it
+	#
+       	if (!defined $self->{'_DBH'} && $paramHash{'DBName'} eq '')  { $self->{'_DBH'} = $DBH }
+
+	#
+	# in either case return the DBH in case someone wants it for convience
+	#
+	return $DBH;
 }
 
 
@@ -792,7 +825,36 @@ sub deleteQueue {
         return %paramHash;
 }
 
+=head2 elementHash
 
+Return the hash for an element from cache, plugin for element database
+
+=cut
+
+sub elementHash {
+        my ($self,%paramHash) = @_;
+
+        if ($self->{'elementHash'}->{$paramHash{'guid'}}{'guid'} eq '') {
+
+                #
+                # add to element guid or type
+                #
+                my $addToWhere = "guid='".$self->safeSQL($paramHash{'guid'})."'";
+                if ($paramHash{'guid'} ne '') {$addToWhere .= " or type='".$self->safeSQL($paramHash{'guid'})."'" }
+
+                #
+                # get tha hash from the DB
+                #
+                my (@scriptArray) = @{$self->runSQL(SQL=>"select 'jsDevel',js_devel,'cssDevel',css_devel,'adminGroup',admin_group,'classPrefix',class_prefix,'siteGUID',site_guid,'guid',guid,'ord',ord,'tags',tags,'public',public,'rootElement',root_element,'type',type,'parent',parent,'title',title,'schemaDevel',schema_devel,'scriptDevel',script_devel,'checkedout',checkedout from element where ".$addToWhere." order by ord limit 1")};
+
+                #
+                # create the hash and return it
+                #
+                %{$self->{'elementHash'}->{$paramHash{'guid'}}} = @scriptArray;
+        }
+
+        return %{$self->{'elementHash'}->{$paramHash{'guid'}}};
+}
 
 =head2 exportCSV
 
@@ -878,6 +940,14 @@ sub flushSearchCache {
         # drop the current data
         #
         $self->runSQL(SQL=>"delete from data_cache where site_guid='".$self->safeSQL($siteGUID)."'");
+
+	#
+	# lets make the stuff we might need
+	#
+        my %dataCacheFields = %{$self->{"dataCacheFields"}};
+        foreach my $key ( keys %dataCacheFields ) {
+        	$self->alterTable(table=>"data_cache",field=>$key,type=>"text",key=>"FULLTEXT",default=>"") 
+        }
 
         #
         # have a counter so we can see how much work we did
@@ -1101,7 +1171,7 @@ sub queueArray {
         # add date critiria if appicable
         #
         if ($paramHash{'dateFrom'} eq '')    { $paramHash{'dateFrom'}   = "0000-00-00 00:00:00" }
-        if ($paramHash{'dateTo'} eq '')      { $paramHash{'dateTo'}     = $self->dateTime(format=>'SQL') }
+        if ($paramHash{'dateTo'} eq '')      { $paramHash{'dateTo'}     = $self->formatDate(format=>'SQL') }
         $whereStatement .= " and scheduled_date <= '".$self->safeSQL($paramHash{'dateTo'})."'";
         $whereStatement .= " and scheduled_date >= '".$self->safeSQL($paramHash{'dateFrom'})."'";
 
@@ -1536,7 +1606,7 @@ sub saveData {
                 #
                 # insert the record
                 #
-                $self->runSQL(SQL=>"insert into data (guid,site_guid,created_date) values ('".$self->safeSQL($paramHash{'guid'})."','".$self->safeSQL($paramHash{'siteGUID'})."','".$self->dateTime(format=>"SQL")."')");
+                $self->runSQL(SQL=>"insert into data (guid,site_guid,created_date) values ('".$self->safeSQL($paramHash{'guid'})."','".$self->safeSQL($paramHash{'siteGUID'})."','".$self->formatDate(format=>"SQL")."')");
         }
 
         #
@@ -1731,7 +1801,7 @@ sub saveQueueHistory {
 	#
         # if sent date isn't set,  lets set it to NOW
         #
-        if ($paramHash{'sentDate'} eq '' || $paramHash{'sentDate'}  =~ /^0000.00.00/) { $paramHash{'sentDate'} = $self->safeSQL($self->dateTime(format=>"SQL")) }
+        if ($paramHash{'sentDate'} eq '' || $paramHash{'sentDate'}  =~ /^0000.00.00/) { $paramHash{'sentDate'} = $self->safeSQL($self->formatDate(format=>"SQL")) }
 
         %paramHash = $self->_recordInit('_guidLeader'   =>'q',
                                         '_table'        =>'queue_history',
@@ -1815,10 +1885,7 @@ sub setCacheIndex {
                 #  loop though each one and if the index is set to one, add it to the index list
                 #
                 for my $key ( keys %schemaHash) {
-                        if ($schemaHash{$key}{index} eq '1') { 
-				$self->FWSLog("Setting Index for : ".$elementGUID." - ".$key);
-				push (@indexArray,$key);
-				}
+                        if ($schemaHash{$key}{index} eq '1') { push (@indexArray,$key) }
                 }
         }
 
@@ -1830,7 +1897,10 @@ sub setCacheIndex {
         #
         # update the extra table of what the cacheIndex is
         #
-        $self->saveExtra(table=>'site',guid=>$paramHash{'siteGUID'},field=>'dataCacheIndex',value=>$cacheValue);
+	if ($self->siteValue('dataCacheIndex') ne $cacheValue) {
+		$self->FWSLog("Setting new site cache index: ".$cacheValue);
+        	$self->saveExtra(table=>'site',guid=>$paramHash{'siteGUID'},field=>'dataCacheIndex',value=>$cacheValue);
+	}
 }
 
 
@@ -2094,7 +2164,11 @@ sub updateDatabase {
                	 	my $type 	= $self->{'dataSchema'}{$table}{$field}{'type'};
                	 	my $key 	= $self->{'dataSchema'}{$table}{$field}{'key'};
                	 	my $default 	= $self->{'dataSchema'}{$table}{$field}{'default'};
-                	$dbResponse .= $self->alterTable(table=>$table,field=>$field,type=>$type,key=>$key,default=>$default);
+
+			#
+			# make sure this isn't a bad record.   It at least needs a table name
+			#
+			if ($table ne '') { $dbResponse .= $self->alterTable(table=>$table,field=>$field,type=>$type,key=>$key,default=>$default) }
         	}
 	}
 
@@ -2169,7 +2243,7 @@ sub updateModifiedDate {
 ############################################################################################
 
 sub _deleteOrphanedData {
-        my ($self,$table,$field,$refTable,$refField,$extraWhere) = @_;
+        my ($self,$table,$field,$refTable,$refField,$extraWhere,$DBH) = @_;
 
         #
         # get the vars set for pre-processing
@@ -2189,19 +2263,19 @@ sub _deleteOrphanedData {
 		#
 		# do the actual delete
 		#
-                $self->runSQL(SQL=>"delete ".$fromSQL);
+                $self->runSQL(DBH=>$DBH,SQL=>"delete ".$fromSQL);
 
 		#
 		# if we are talking about the data field, lets do the same thing to the data cache table
 		#
                 if ($table eq 'data') {
-                        $self->runSQL(SQL=>"delete from ".$table."_cache where ".$table."_cache.".$field." in (select ".$field." from (select distinct ".$table."_cache.".$field." from ".$table."_cache left join ".$refTable." on ".$refTable.".".$refField." = ".$table."_cache.".$field." where ".$refTable.".".$refField." is null ".$extraWhere.") as delete_list)");
+                        $self->runSQL(DBH=>$DBH,SQL=>"delete from ".$table."_cache where ".$table."_cache.".$field." in (select ".$field." from (select distinct ".$table."_cache.".$field." from ".$table."_cache left join ".$refTable." on ".$refTable.".".$refField." = ".$table."_cache.".$field." where ".$refTable.".".$refField." is null ".$extraWhere.") as delete_list)");
                 }
 
 		#
 		# run the same fromSQL and see if anything is left
 		#
-                ($keepDeleting) = @{$self->runSQL(SQL=>"select 1 ".$fromSQL)};
+                ($keepDeleting) = @{$self->runSQL(DBH=>$DBH,SQL=>"select 1 ".$fromSQL)};
         }
 }
 
@@ -2296,7 +2370,7 @@ sub _recordInit {
                 if ($paramHash{'_guidLeader'} eq '') 	{ $paramHash{'_guidLeader'} = 'r' }
                 $paramHash{'siteGUID'} = $self->safeSQL($paramHash{'siteGUID'});
                 $paramHash{'guid'}      = $self->createGUID($paramHash{'_guidLeader'});
-                $self->runSQL(SQL=>"insert into ".$self->safeSQL($paramHash{'_table'})." (guid,site_guid,created_date) values ('".$paramHash{'guid'}."','".$paramHash{'siteGUID'}."','".$self->dateTime(format=>"SQL")."')");
+                $self->runSQL(DBH=>$paramHash{'DBH'},SQL=>"insert into ".$self->safeSQL($paramHash{'_table'})." (guid,site_guid,created_date) values ('".$paramHash{'guid'}."','".$paramHash{'siteGUID'}."','".$self->formatDate(format=>"SQL")."')");
         }
 
         if (($paramHash{'_table'} eq 'directory' || $paramHash{'_table'} eq 'profile') && $paramHash{'pin'} eq '') {
@@ -2304,7 +2378,7 @@ sub _recordInit {
                 # set the dirived stuff so nobody gets sneeky and tries to pass it to the procedure
                 #
                 $paramHash{'pin'} = $self->createPin();
-                $self->runSQL(SQL=>"update ".$self->safeSQL($paramHash{'_table'})." set pin='".$self->safeSQL($paramHash{'pin'})."' where guid='".$self->safeSQL($paramHash{'guid'})."'");
+                $self->runSQL(DBH=>$paramHash{'DBH'},SQL=>"update ".$self->safeSQL($paramHash{'_table'})." set pin='".$self->safeSQL($paramHash{'pin'})."' where guid='".$self->safeSQL($paramHash{'guid'})."'");
         }
 
         return %paramHash;
@@ -2348,7 +2422,7 @@ sub _recordHash {
 	#
 	# get the hash
 	#
-	my @returnArray = @{$self->runSQL(SQL=>$SQL." from ".$paramHash{'table'}." where ".$paramHash{'where'})};
+	my @returnArray = @{$self->runSQL(DBH=>$paramHash{'DBH'},SQL=>$SQL." from ".$paramHash{'table'}." where ".$paramHash{'where'})};
 
 	#
 	# pop off the ext values
@@ -2418,12 +2492,18 @@ sub _recordSave {
         #
         $SQL =~ s/,$//sg;
 
+	#
+	# default key is guid
+	#
+	if ($paramHash{'keyField'} eq '') {		$paramHash{'keyField'} = 'guid' }
+	if ($paramHash{'keyValueKey'} eq '') {		$paramHash{'keyValueKey'} = 'guid' }
+
         #
         # add scope to the statement
         #
-        $SQL .= " where guid='".$self->safeSQL($paramHash{"guid"})."'";
+        $SQL .= " where ".$self->safeSQL($paramHash{'keyField'})."='".$self->safeSQL($paramHash{$paramHash{'keyValueKey'}})."'";
 
-        $self->runSQL(SQL=>$SQL);
+        $self->runSQL(DBH=>$paramHash{'DBH'},SQL=>$SQL);
 
         #
         # save the keys in the ext field;
@@ -2438,7 +2518,7 @@ sub _recordSave {
                         $key !~ /^siteGUID$/ &&
                         $key !~ /^pin$/) {
 			if ($self->{'dataSchema'}{$paramHash{'_table'}}{'extra_value'}{'type'} ne '') {
-                        	$self->saveExtra(table=>$paramHash{'_table'},guid=>$paramHash{'guid'},field=>$key,value=>$paramHash{$key});
+                        	$self->saveExtra(DBH=>$paramHash{'DBH'},table=>$paramHash{'_table'},guid=>$paramHash{'guid'},field=>$key,value=>$paramHash{$key});
 				}
                 }
         }

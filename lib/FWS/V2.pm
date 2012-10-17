@@ -16,11 +16,11 @@ FWS::V2 - Framework Sites version 2
 
 =head1 VERSION
 
-Version 0.008
+Version 0.009
 
 =cut
 
-our $VERSION = '0.008';
+our $VERSION = '0.009';
 
 
 =head1 SYNOPSIS
@@ -31,10 +31,16 @@ our $VERSION = '0.008';
 				DBPassword	=> 'superSecret',
 				DBHost		=> 'localhost',
 				DBType		=> 'MySQL');
+
+=cut
 	
 =head1 DESCRIPTION
 
-Framework Sites version 2 content management, eCommerce and web based development platform.
+FWS::V2 is the utility counterpart to the web based content management development platform provided at www.frameworksites.com.  The web based version of this module is derived from this source with additional web specific features and packaging.   The web based version enables the FWS to function on most any modern hosting environment, be upgraded in real time via the web based FWS administration, and control shared plugins between all of your installations even on different servers.
+
+Using this version is ideal for accessing any plugin feature, or data stored within a FWS installation from a standalone script.  Examples of this would be scripts to do site maintenance, imports, exports, mass data updates, data mining, 3rd party data synchronization, web services, APIs... and more!   
+
+The syntax and usage of the FWS::V2 is identical to the web based element and plugin development available within the FWS web based administration.  Code from either is interchangeable between both distributions of FWS::V2 and the web based distribution of FWS available from www.frameworksites.com.
 
 =head1 METHODS AND PARAMETERS
 
@@ -90,7 +96,6 @@ The DBUser's password.
 =item * DBHost (MySQL Required if your database is not on localhost)
 
 The DBHost will default to 'localhost' if not specified, but can be what ever is configured for the database environment.
-
 
 =item * DBType (SQLite Required)
 
@@ -254,7 +259,7 @@ The default email address for the site being rendered.  This is set via 'Site Se
 
 =item * {'fileFWSPath'}
 
-The file location of FWS packaged distrubution files.  This is normaly not used except internally as the files in this directory could change with an upgrade.
+The file location of FWS packaged distribution files.  This is normaly not used except internally as the files in this directory could change with an upgrade.
 
 =item * {'homeGUID'}
 
@@ -760,8 +765,8 @@ sub new {
                 "site_guid"                     => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
                 "child"                         => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
                 "parent"                        => { type => "char(36)" ,key => "MUL"         ,default => ""                  },
-                "ord"                           => { type => "int(11)"  ,key => ""            ,default => "0"                 },
-                "layout"                        => { type => "char(50)" ,key => ""            ,default => ""                  },
+                "ord"                           => { type => "int(11)"  ,key => "MUL"         ,default => "0"                 },
+                "layout"                        => { type => "char(50)" ,key => "MUL"         ,default => ""                  },
         };
 
         $self->{"dataSchema"}{"element"} = {
@@ -773,7 +778,7 @@ sub new {
                 "tags"                          => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showDeveloper'},
                 "class_prefix"                  => { type => "char(255)",key => ""            ,default => ""                  ,AJAXGroup => 'showDeveloper'},
                 "admin_group"                   => { type => "char(50)" ,key => ""            ,default => ""                  ,AJAXGroup => 'showDeveloper'},
-                "ord"                           => { type => "int(11)"  ,key => ""            ,default => "0"                 ,AJAXGroup => 'showDeveloper'},
+                "ord"                           => { type => "int(11)"  ,key => "MUL"         ,default => "0"                 ,AJAXGroup => 'showDeveloper'},
                 "public"                        => { type => "int(1)"   ,key => ""            ,default => "0"                 ,AJAXGroup => 'showDeveloper'},
                 "css_devel"                     => { type => "int(1)"   ,key => ""            ,default => "0"                 },
                 "js_devel"                      => { type => "int(1)"   ,key => ""            ,default => "0"                 },
@@ -921,7 +926,7 @@ With the full web optimized version of FWS, the following sequence can be execut
 	#
 	$fws->displayContent();
 
-NOTE: At this time, all required methods are not available for web based rendering in this distrubution.
+NOTE: This version of the module is not capable of doing web based rendering.   For the web based version of this module visit www.frameworksites.com
 
 =cut
 

@@ -9,11 +9,11 @@ FWS::V2::Net - Framework Sites version 2 network access methods
 
 =head1 VERSION
 
-Version 0.001
+Version 0.003
 
 =cut
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 
 =head1 SYNOPSIS
@@ -39,6 +39,7 @@ Post HTTP or HTTPS and return the result to a hash reference containing the resu
 						type	=>'get'			# default is get [get|post]
 						user	=>'theUser'		# if needed for auth
 						password=>'thePass'		# if needed for auth 
+						timeout =>'30'			# fail if 30 seconds go by
 						ip	=>'1.2.3.4');		# show that I am from this ip
 
 	print $responseRef->{'url'}."\n";		# what was passed to HTTPRequest
@@ -58,6 +59,12 @@ sub HTTPRequest {
         my $ua = LWP::UserAgent->new();
 
 	#
+	# set the agent if we need to
+	#
+	if ($paramHash{'agent'} ne '') 		{ $ua->agent($paramHash{'agent'}) }
+	if ($paramHash{'timeout'} ne '') 	{ $ua->timeout($paramHash{'timeout'}) }
+
+	#
 	# lets get our request obj ready
 	#
         my $req;
@@ -65,7 +72,7 @@ sub HTTPRequest {
         #
         # force an IP if needed
         #
-        if ($paramHash{'ip'} ne '') { $ua->local_address($paramHash{'ip'}) }
+        if ($paramHash{'ip'} ne '') 		{ $ua->local_address($paramHash{'ip'}) }
 
         #
         # this is a post... but we get the stuff just like a get - but do the work

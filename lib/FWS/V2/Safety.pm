@@ -9,11 +9,11 @@ FWS::V2::Safety - Framework Sites version 2 safe data wrappers
 
 =head1 VERSION
 
-Version 0.002
+Version 0.004
 
 =cut
 
-our $VERSION = '0.002';
+our $VERSION = '0.004';
 
 
 =head1 SYNOPSIS
@@ -148,6 +148,63 @@ sub safeURL {
         $incommingText =~ s/\&/and/sg;
         $incommingText =~ s/[^0-9a-zA-Z]/_/sg;
 	$incommingText =~ s/^\s+//;
+        return $incommingText;
+}
+
+
+
+
+
+=head2 safeJSON
+
+Replace any thing harmful to an JSON node that could cause it to fail.  It will escape stuff like quotes and such.
+
+        #
+        # make a node safe
+        #
+        my $sillyNode = 'This "Can not" be in json';
+        my $safeSillyNode = $fws->safeJSON($sillyNode);
+        print 'Safe JSON: '.$sillyNode;
+
+=cut
+
+
+sub safeJSON {
+        my ($self, $incommingText) = @_;
+        $incommingText =~ s/\\/\\\\/sg;
+        $incommingText =~ s/"/\\"/sg;
+        $incommingText =~ s/\//\\\//sg;
+        return $incommingText;
+}
+
+
+
+
+
+
+=head2 safeXML
+
+Replace any thing harmful to an XML node that could cause it to fail validation.   & and < will be converted to &amp; and &lt;
+
+        #
+        # make a node safe
+        #
+        my $sillyNode = '55 is < 66 & 77';
+        my $safeSillyNode = $fws->safeXML($sillyNode);
+	print '<silly>'.$safeSillyNode.'</silly>';
+        
+	#
+        # all in one
+        #
+	print '<silly>'.$fws->safeXML('55 is < 66 & 77').'</silly>';
+
+
+=cut
+
+sub safeXML {
+        my ($self, $incommingText) = @_;
+        $incommingText =~ s/&/&amp;/sg;
+        $incommingText =~ s/</&lt;/sg;
         return $incommingText;
 }
 

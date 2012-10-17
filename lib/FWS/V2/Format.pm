@@ -200,26 +200,80 @@ sub createPassword {
         return $returnString;
 }
 
-=head2 dateTime
+
+
+=head2 dateDiff
+
+Return the amount of time between two dates in days or seconds.
+
+Possible Parameters:
+
+=over 4
+
+=item * date
+
+The base date to compare against
+
+=item * compDate
+
+A date in the future or past compare it to.  If not passed, the current date will be used.
+
+=item * format
+
+The date format used.  Default is SQLTime,  you can choose epoch as an alternative
+
+=item * type
+
+The compare type to return as.  Default is in 'seconds', you set this to 'days' if you would like the amount in days with its remainder as a decimal.
+
+=back
+
+=cut
+
+sub dateDiff {
+        my ($self,%paramHash) = @_;
+
+	my $format = 'SQLTime';
+	
+	my $epoch1 = $self->formatDate(format=>'epoch',$format=>$paramHash{date});
+	my $epoch2 = $self->formatDate(format=>'epoch',$format=>$paramHash{compDate});
+	
+	my $secDiff = ($epoch2 - $epoch1);
+
+	#
+	# if its 0 lets get out of here so we don't have devide by 0 errors
+	#
+	if ($secDiff == 0) { return 0 }
+
+	if ($paramHash{'type'} =~ /day/i) {
+		return $secDiff / 86400;
+	}
+	else {
+		return $secDiff;
+	}	
+}
+
+
+=head2 formatDate
 
 Return the date time in a given format.  By passing epochTime, SQLTime you can do a time conversion from that date/time to what ever format is set to.  If you do not pass epoch or SQL time the server time will be used.
 
         #
         # get the current Date in SQL format
         #
-        my $currentDate = $fws->dateTime(format=>'date');
+        my $currentDate = $fws->formatDate(format=>'date');
         
 	#
         # convert SQL formated date time to a human form
         #
-        my $humanDate = $fws->dateTime(SQLTime=>'2012-10-12 10:09:33',format=>'date');
+        my $humanDate = $fws->formatDate(SQLTime=>'2012-10-12 10:09:33',format=>'date');
 
 By passing monthMod or dayMod you can adjust the month forward or backwards by the given number of months or days
 
 	#
 	# 3 months from today (negative numbers are ok)
 	#
-	my $threeMonths = $fws->dateTime(format=>'date',monthMod=>3);
+	my $threeMonths = $fws->formatDate(format=>'date',monthMod=>3);
 
 Multilingual support: French date formats will be used  for 'fancyDate' and 'date' if the language() is set to FR.
 
@@ -251,6 +305,10 @@ This will default to '-', but can be changed to anything.   (Note: Do not use th
 
 Time zone modifier.  Example: EST would be -5
 
+=item * numberTime
+
+Use an number translated time format (It looks like SQL without sperators)  YYYYMMDDHHMMSS.  HHMMSS will default to 000000 if not passed.
+
 =item * SQLTime
 
 Use an SQL time format as the incomming date and time.
@@ -268,6 +326,10 @@ mm-dd-yyyy
 =item * time
 
 hh:mmAM XXX
+
+=item * shortDate
+
+MMM DD YYYY  (MMM is the three letter acrynomn for the month in caps)
 
 =item * fancyDate
 
@@ -321,7 +383,7 @@ dd
 
 =cut
 
-sub dateTime {
+sub formatDate {
         my ($self,%paramHash) = @_;
         my $format     		= $paramHash{'format'};
         my $monthMod    	= $paramHash{'monthMod'};
@@ -337,14 +399,37 @@ sub dateTime {
 	#
 	if ($dateSeparator eq '') { $dateSeparator = '-' };
 
-        if ($SQLTime ne '') {
-                my @timeSplit = split(/[ \-:]/,$SQLTime);
-                if ( $timeSplit[0] < 1970) {$timeSplit[0] = '1970';}
+	#
+	# pase numbers or sql times
+	#
+        if ($paramHash{'numberTime'} ne '' || $SQLTime ne '') {
+               
+		# 	
+		# do sql by default, but overwrite with numberTime if thats what it is
+		#
+		my @timeSplit = split(/[ \-:]/,$paramHash{'SQLTime'});
+        	if ($paramHash{'numberTime'} ne '') {
+	                $timeSplit[0] = substr($paramHash{'numberTime'},0,4);
+	                $timeSplit[1] = substr($paramHash{'numberTime'},4,2);
+	                $timeSplit[2] = substr($paramHash{'numberTime'},6,2);
+	                $timeSplit[3] = substr($paramHash{'numberTime'},8,2);
+	                $timeSplit[4] = substr($paramHash{'numberTime'},10,2);
+	                $timeSplit[5] = substr($paramHash{'numberTime'},12,2);
+		}
+                
+		#
+		# fix anything that could rock the boat
+		#
+		if ( $timeSplit[0] < 1970) {$timeSplit[0] = '1970';}
                 if ( $timeSplit[1] eq '' || $timeSplit[1] == 0) {$timeSplit[1] = '1'}
                 if ( $timeSplit[2] eq '' || $timeSplit[2] == 0) {$timeSplit[2] = '1'}
                 if ( $timeSplit[3] eq '') {$timeSplit[3] = '0'}
                 if ( $timeSplit[4] eq '') {$timeSplit[4] = '0'}
                 if ( $timeSplit[5] eq '') {$timeSplit[5] = '0'}
+
+		#
+		# fix the month and make it epoch to use for the rest of the script
+		#
                 $timeSplit[1]--;
                 require Time::Local;
                 Time::Local->import();
@@ -440,11 +525,18 @@ sub dateTime {
                 $showDateTime = $year.$month.$monthDay.$hour.$minute.$sec;
         }
 
-        if ($format =~ /^cookie$/i) {
+        if ($format =~ /^shortDate$/i) {
+                my @monthName = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+                $showDateTime = $monthName[$mon-1].' '.$monthDay.' '.$year;
+        }
+
+	if ($format =~ /^cookie$/i) {
                 my @dayName = qw(Sun Mon Tue Wed Thu Fri Sat);
                 my @monthName = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
                 $showDateTime = $dayName[$wday].','.' '.$monthDay.$dateSeparator.$monthName[$mon-1].$dateSeparator.$year.' '.$hour.':'.$minute.':'.$sec.' GMT';
         }
+
+
 
 
         if ($format =~ /^fancyDate$/i) {
@@ -899,7 +991,7 @@ sub truncateContent {
 	#
 	# add posttext if there is a chop
 	#
-	if (length($paramHash{'content'}) > $paramHash{'content'}) { $newString .= $paramHash{'postText'} }
+	if ($paramHash{'content'} ne $newString) { $newString .= $paramHash{'postText'} }
 
 	#
 	# return our newly created pontentialy shorter string
@@ -1285,7 +1377,7 @@ sub adminField {
 		#
 		$fieldHTML .= '<select class="FWSInputField" id="'.$paramHash{'uniqueId'}.'_year" name="'.$paramHash{'uniqueId'}.'_year" onchange="'.$bdayOnchange.'">';
 		$fieldHTML .= '<option>- Year -</option>';
-		my $year = $self->dateTime(format=>'year');
+		my $year = $self->formatDate(format=>'year');
 		for (my $count = $year-4; $count > $year-110; $count--) { $fieldHTML .= '<option value="'.$count.'">'.$count.'</option>' }
 		$fieldHTML .= '</select>';
 	}    
@@ -1456,12 +1548,18 @@ sub adminField {
 	# add autocomplete code
 	#
 	if ($paramHash{'autocompleteSource'} ne '') {
-        $fieldHTML .= '<script>$("#'.$paramHash{'uniqueId'}.'" ).autocomplete({';
-        $fieldHTML .= 'source: '.$paramHash{'autocompleteSource'}.',';
-        $fieldHTML .= 'search: function(event, ui) {$("#'.$paramHash{'uniqueId'}.'_img").attr("src","'.$self->loadingImage().'");'.$paramHash{'autocompleteSearch'} .'},';
-        $fieldHTML .= 'open: function(event, ui) {$("#'.$paramHash{'uniqueId'}.'_img").attr("src","'.$self->{'fileWebPath'}.'/fws/icons/blank_16.png");'.$paramHash{'autocompleteOpen'} .'},';
-        $fieldHTML .= 'select: function(event, ui) {'.$paramHash{'autocompleteSelect'} .'}';
-	$fieldHTML .= '});</script>';
+	        $fieldHTML .= '<script>$("#'.$paramHash{'uniqueId'}.'" ).autocomplete({';
+	        $fieldHTML .= 'source: '.$paramHash{'autocompleteSource'}.',';
+	        $fieldHTML .= 'search: function(event, ui) {$("#'.$paramHash{'uniqueId'}.'_img").attr("src","'.$self->loadingImage().'");'.$paramHash{'autocompleteSearch'} .'},';
+	        $fieldHTML .= 'open: function(event, ui) {$("#'.$paramHash{'uniqueId'}.'_img").attr("src","'.$self->{'fileWebPath'}.'/fws/icons/blank_16.png");'.$paramHash{'autocompleteOpen'} .'},';
+	        $fieldHTML .= 'select: function(event, ui) {'.$paramHash{'autocompleteSelect'} .'}';
+		$fieldHTML .= '})';
+	
+		if ($paramHash{'autocompletePostHTML'} ne '') {
+			$fieldHTML .= '.data("autocomplete")._renderItem = function(ul, item) { return $("<li></li>")';
+	        	$fieldHTML .= '.data("item.autocomplete", item).append("<a>" + item.value + \' '.$paramHash{'autocompletePostHTML'}.'</a>\').appendTo(ul); }'; 
+		}
+		$fieldHTML .= ';</script>';
 	}
 
 

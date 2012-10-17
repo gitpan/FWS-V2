@@ -9,11 +9,11 @@ FWS::V2::Legacy - Framework Sites version 2 compatibility and legacy methods and
 
 =head1 VERSION
 
-Version 0.003
+Version 0.004
 
 =cut
 
-our $VERSION = '0.003';
+our $VERSION = '0.004';
 
 
 =head1 SYNOPSIS
@@ -330,9 +330,21 @@ sub skipIpCheckOnLogin {
 }
 
 
+=head2 dateTime
+
+Deprecated, use formatDate()
+
+=cut
+
+sub dateTime {
+        my ($self,%paramHash) = @_;
+        return $self->formatDate(%paramHash);
+}
+
+
 =head2 showDateTime
 
-Deprecated, use dateTime()
+Deprecated, use formatDate()
 
 =cut
 
@@ -340,8 +352,20 @@ sub showDateTime {
         my %paramHash;
 	my $self;
         ($self,$paramHash{'format'},$paramHash{'monthMod'},$paramHash{'epochTime'},$paramHash{'GMTOffset'},$paramHash{'SQLTime'}) = @_;
-        return $self->dateTime(%paramHash);
+        return $self->formatDate(%paramHash);
 }
+
+=head2 tinyMCEHead
+
+Deprecated, built into the fws-2.x.css
+
+=cut
+
+sub tinyMCEHead {
+        my ($self) = @_;
+        return '';
+}
+
 
 =head2 truncatePhrase
 

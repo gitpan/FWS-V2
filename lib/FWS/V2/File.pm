@@ -9,11 +9,11 @@ FWS::V2::File - Framework Sites version 2 text and image file methods
 
 =head1 VERSION
 
-Version 0.003
+Version 0.004
 
 =cut
 
-our $VERSION = '0.003';
+our $VERSION = '0.004';
 
 
 =head1 SYNOPSIS
@@ -441,6 +441,12 @@ sub runScript {
         my ($self,$guid,%valueHash) = @_;
 
 	#
+	# because of the nature of the element caching it is possible for one to be ran twice,  to make sure lets create a testing hash
+	#
+	my %scriptRan;
+						
+
+	#
 	# if this is blank, lets just not do it
 	#
 	if ($guid ne '') {
@@ -463,10 +469,16 @@ sub runScript {
                         if ($fullGUID eq $guid) { $liveGUID = $fullElementHash{$fullGUID}{guid} }
                         if ($fullElementHash{$fullGUID}{type} eq $guid) { $liveGUID = $fullElementHash{$fullGUID}{guid} }
 
+
                         #
                         # we snagged one!  lets do it!
                         #
-                        if ($liveGUID ne "") {
+                        if ($liveGUID ne "" && $scriptRan{$liveGUID} ne '1') {
+				#
+				# se the flag so we don't do this one twice
+				#
+				$scriptRan{$liveGUID} = '1';
+			
                                 my %elementHash = $fws->elementHash(guid=>$liveGUID);
 
 				if ($elementHash{'scriptDevel'} ne '') {
@@ -474,6 +486,8 @@ sub runScript {
 			                my $errorCode = $@;
 			                if ($errorCode) { $self->FWSLog($guid,$errorCode) }
 				}
+
+			
 			}
 		}	
 	
@@ -688,7 +702,7 @@ sub FWSLog{
                 my @resultLines = split /\n/, $errorText;
                 foreach my $resultLine (@resultLines) {
                         if ($resultLine ne '') {
-                                print FILE $ENV{"REMOTE_ADDR"}." - [".$self->dateTime(format=>"apache"). "] ".$module.": ".$resultLine." [".$ENV{"SERVER_NAME"}.$ENV{"REQUEST_URI"}."]\n";
+                                print FILE $ENV{"REMOTE_ADDR"}." - [".$self->formatDate(format=>"apache"). "] ".$module.": ".$resultLine." [".$ENV{"SERVER_NAME"}.$ENV{"REQUEST_URI"}."]\n";
                         }
                 }
                 close(FILE);
@@ -713,7 +727,7 @@ sub SQLLog{
         if ($self->{'SQLLogLevel'} > 0) {
                 open(FILE, ">>".$self->{'fileSecurePath'}."/SQL.log");
                 if (($self->{'SQLLogLevel'} eq '1' && ($SQL =~/^insert/i || $SQL=~/^delete/i || $SQL=~/^update/i || $SQL=~/^alter/i)) || $self->{'SQLLogLevel'} eq '2') {
-                        print FILE $ENV{"REMOTE_ADDR"}." - [".$self->dateTime(format=>"apache"). "] ".$SQL." [".$ENV{"SERVER_NAME"}.$ENV{"REQUEST_URI"}."]\n";
+                        print FILE $ENV{"REMOTE_ADDR"}." - [".$self->formatDate(format=>"apache"). "] ".$SQL." [".$ENV{"SERVER_NAME"}.$ENV{"REQUEST_URI"}."]\n";
                 }
                 close(FILE);
         }
