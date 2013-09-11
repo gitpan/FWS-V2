@@ -1,4 +1,25 @@
 Revision history for FWS-V2
+1.1305 2013-09-09
+ - FULL WEB RELEASE! You can now run FWS web renderings from FWS::V2
+ - Added formMap methods as part of core release
+ - Minor change to prevent a bug with tinymce
+ - $fws->{GMTOffset} is now configured in site settings
+ - Stored hash libraries added: saveHash(), deleteHash(), and hashArray()
+ - Added Cache libary base methods
+ - Added backup and restore methods as well as a generic unpack file method
+ - Many updates to code formatting
+ - Add Geo.pm methods
+ - Add Display.pm methods
+ - Add Admin.pm methods
+ - Bootstrap 2 Support
+ - siteFriendly update that extends support for pageFriendlyURLs
+ - Major update to move more admin modules into the FWS admin package
+ - Many minor bug fixes
+ - Version of FWS udpated to match  web distro version
+ - regesterPlugins() now run all plugins via the developer admin
+ - Sub element AJAX wrappers are now present for delete calls on nested elements
+ - Added postFlushWebCache hook
+
 0.009 2012-10-16
  - Add an ease of use method for date comparing: dateDiff()
  - Plugins using friendlyURL table fields in thier schema are now added to the friendly URL look up query automatically
@@ -10,7 +31,7 @@ Revision history for FWS-V2
  - HTTPRequest() can now be passed what agent it is using
  - Added 'force install' option to the plugin installer
  - Added safeXML() method to Safety.pm
- - Added shortDate to dateTime() MMM DD YYYY (where MMM is the three letter acrynomn of the month in caps)
+ - Added shortDate to dateTime() MMM DD YYYY (where MMM is the three letter acronym of the month)
  - _deleteOrphanedData utility now can be passed a unique DBH
  - Made connectDBH() capable of being used outside the context of the FWS for other functions by passing a hash of its requirements
  - Other minor formatting and documentation updates
