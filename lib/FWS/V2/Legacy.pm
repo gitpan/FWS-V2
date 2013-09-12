@@ -10,11 +10,11 @@ FWS::V2::Legacy - Framework Sites version 2 compatibility and legacy methods and
 
 =head1 VERSION
 
-Version 1.13091019
+Version 1.13091122
 
 =cut
 
-our $VERSION = '1.13091019';
+our $VERSION = '1.13091122';
 
 
 =head1 SYNOPSIS

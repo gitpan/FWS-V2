@@ -11,11 +11,11 @@ FWS::V2::Check - Framework Sites version 2 validation and checking methods
 
 =head1 VERSION
 
-Version 1.13091019
+Version 1.13091122
 
 =cut
 
-our $VERSION = '1.13091019';
+our $VERSION = '1.13091122';
 
 
 =head1 SYNOPSIS
